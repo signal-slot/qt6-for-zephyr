@@ -1,0 +1,47 @@
+# Qt 6 on Zephyr -- module Kconfig.
+
+menuconfig QT
+	bool "Qt 6 application support"
+	# Soft requirements (CPP_EXCEPTIONS / RTTI / NEWLIB_LIBC / POSIX_API
+	# / FPU) are not encoded as `depends on` here because Zephyr's
+	# Choice symbol resolution for the libc family is fragile -- prj.conf
+	# explicitly selects NEWLIB_LIBC but PICOLIBC has won at evaluation
+	# time, which would silently disable CONFIG_QT.  The module's
+	# zephyr/CMakeLists.txt fails the configure with a clear message
+	# instead if those features are not on.
+	help
+	  Enable Qt 6 application support.  Links the Qt6 Cortex-M7 static
+	  archives from QT_ZEPHYR_PREFIX and the per-board Zephyr glue
+	  (display, touch, event-dispatcher factory, libc stubs that need
+	  <zephyr/kernel.h>).
+
+if QT
+
+config QT_GUI
+	bool "Build Qt GUI applications (raster QPainter)"
+	default y
+
+config QT_QML
+	bool "Build Qt QML applications (V4 + QtQuick scene graph)"
+	default n
+
+config QT_QUICK_CONTROLS
+	bool "Link Qt Quick Controls 2 (Basic style)"
+	default n
+	depends on QT_QML
+
+config QT_SVG
+	bool "Link Qt SVG image-format plugin"
+	default n
+	depends on QT_GUI
+
+config QT_EMBEDDED_ROBOTO_FONT
+	bool "Embed Roboto-Regular TTF in the binary"
+	default y
+	help
+	  QFontDatabase has no system fonts on Zephyr; embedding a TTF as
+	  byte array and registering it via
+	  QFontDatabase::addApplicationFontFromData lets QPainter::drawText
+	  produce glyphs.  Costs ~350 KB of flash.
+
+endif # QT

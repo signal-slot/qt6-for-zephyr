@@ -1,0 +1,16 @@
+# Zephyr module manifest for Qt 6 on Zephyr.
+#
+# Lets west discover this directory as a Zephyr module so any Qt
+# application running under `west build` automatically picks up the
+# Zephyr-side glue (display + touch bridges, dispatcher factory, font
+# data, QPA plugin import, libc stubs that need <zephyr/kernel.h>).
+#
+# Activate by adding `manifest.projects[].path: qt5/zephyr-module` to
+# the west.yml of the workspace, or by passing
+# `-DZEPHYR_EXTRA_MODULES=<repo>/qt5/zephyr-module` on the west build
+# command line.
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig
+
+name: qt-zephyr-port
