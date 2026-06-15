@@ -46,6 +46,17 @@ target_sources(app PRIVATE
     "${QT_QTBASE_SOURCE}/src/corelib/kernel/qeventdispatcher_zephyr.cpp"
 )
 
+# Idle keep-alive thread (src/qzephyr_keepalive.c): prevents the silent
+# idle/SysTick clock-gating hang seen on long GUI soaks (collidingmice).
+# Force-linked with -u because the TU's only symbols are a K_THREAD_DEFINE
+# registration the linker would otherwise drop as unreferenced.
+if(CONFIG_QT_GUI)
+    target_sources(app PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_keepalive.c"
+    )
+    target_link_options(app PRIVATE "-Wl,-u,qz_keepalive_link_anchor")
+endif()
+
 # QPA plugin import + display-side glue (display_write /
 # display_get_capabilities hooks, QZephyrScreen format detection).
 # Only relevant when QtGui is in use; a Core-only firmware does not
