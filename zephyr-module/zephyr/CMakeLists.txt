@@ -46,6 +46,36 @@ target_sources(app PRIVATE
     "${QT_QTBASE_SOURCE}/src/corelib/kernel/qeventdispatcher_zephyr.cpp"
 )
 
+# qeventdispatcher_zephyr.cpp ends with #include "moc_qeventdispatcher_zephyr_p.cpp"
+# (the upstream idiom -- its Q_OBJECT lives in the _p.h private header, and that
+# moc carries the metaobject AND the dispatcher's vtable).  qtbase's own AUTOMOC
+# would produce that moc, but this TU is deferred to the Stage-2 Zephyr app build
+# (QT_DEFER_ZEPHYR_RUNTIME=ON), and the `app` target's AUTOMOC is disabled there
+# ("no valid Qt version").  Without the moc the vtable is undefined and resolves
+# to garbage under -Wl,--unresolved-symbols=ignore-all, faulting on the first
+# virtual call (wakeUp() from QCoreApplication::postEvent).  So generate the moc
+# explicitly and put it on the include path for the #include to pick up.
+find_program(QZ_MOC NAMES moc
+    HINTS "${QT_ZEPHYR_PREFIX}/libexec" "${QT_ZEPHYR_PREFIX}/bin"
+          /usr/lib64/qt6/libexec /usr/lib/qt6/libexec /usr/lib/qt6/bin)
+if(NOT QZ_MOC)
+    message(FATAL_ERROR "qt-zephyr-port: a host 'moc' is required to build "
+        "qeventdispatcher_zephyr_p.h but none was found.")
+endif()
+set(_qz_disp_hdr "${QT_QTBASE_SOURCE}/src/corelib/kernel/qeventdispatcher_zephyr_p.h")
+set(_qz_moc_dir "${CMAKE_CURRENT_BINARY_DIR}/qz_moc")
+file(MAKE_DIRECTORY "${_qz_moc_dir}")
+# Generate at configure time (re-runs on reconfigure, e.g. header mtime change).
+execute_process(
+    COMMAND "${QZ_MOC}" "${_qz_disp_hdr}"
+            -o "${_qz_moc_dir}/moc_qeventdispatcher_zephyr_p.cpp"
+    RESULT_VARIABLE _qz_moc_rc)
+if(NOT _qz_moc_rc EQUAL 0)
+    message(FATAL_ERROR "qt-zephyr-port: moc failed (${_qz_moc_rc}) for "
+        "${_qz_disp_hdr}")
+endif()
+target_include_directories(app PRIVATE "${_qz_moc_dir}")
+
 # Idle keep-alive thread (src/qzephyr_keepalive.c): prevents the silent
 # idle/SysTick clock-gating hang seen on long GUI soaks (collidingmice).
 # Force-linked with -u because the TU's only symbols are a K_THREAD_DEFINE
