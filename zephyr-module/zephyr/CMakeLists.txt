@@ -98,6 +98,16 @@ if(CONFIG_QT_GUI)
     )
 endif()
 
+# Temporary heap diagnostics (2026-06-12): fill-on-free via --wrap=free so
+# use-after-free reads surface as 0xDBDBDBDB in crash registers.  Rides the
+# CONFIG_SYS_HEAP_VALIDATE diagnostic gate; absent from normal builds.
+if(CONFIG_SYS_HEAP_VALIDATE)
+    target_sources(app PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_heap_diag.c"
+    )
+    target_link_options(app PRIVATE "-Wl,--wrap=free" "-Wl,--wrap=realloc")
+endif()
+
 # Touch-side glue.  Requires CONFIG_INPUT (Zephyr's input subsystem)
 # AND CONFIG_QT_GUI (QWindowSystemInterface routes pointer events to
 # a QWindow).  A headless or input-less board skips this entirely.
@@ -158,10 +168,188 @@ if(CONFIG_QT_GUI)
 endif()
 
 if(CONFIG_QT_QML)
+    _qza_module_private_dir(QtQml _qza_qml_private)
+    _qza_module_private_dir(QtQuick _qza_quick_private)
     target_include_directories(app PRIVATE
         "${QT_ZEPHYR_PREFIX}/include/QtQml"
         "${QT_ZEPHYR_PREFIX}/include/QtQuick"
+        "${_qza_qml_private}"
+        "${_qza_qml_private}/QtQml"
+        "${_qza_quick_private}"
+        "${_qza_quick_private}/QtQuick"
     )
+endif()
+
+# QSG vglite adaptation -- registers itself with qtdeclarative via the
+# weak `qt_zephyr_qsg_external_adaptation` hook (patched into
+# qtdeclarative/src/quick/scenegraph/qsgcontextplugin.cpp).  Compiled
+# only when CONFIG_QT_VGLITE=y, so a Qt firmware without the opt-in
+# leaves the weak symbol unresolved and the patch is a no-op.
+if(CONFIG_QT_VGLITE)
+    # The vglite QtQuick scenegraph backend: adaptation entry point, the
+    # node + render-context factory, the renderer, the basic render loop,
+    # and one source per QSGVGLite* node type.  Fully software-independent
+    # (no QSGSoftware* symbol) -- see src/qsg_vglite/qsgvglitecontext_p.h.
+    target_include_directories(app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src")
+
+    # RT1170 GC355 GPU2D bring-up (clock + __nocache pools + IRQ + vg_lite_init).
+    # Opt-in: the __nocache region alone perturbs display-DMA timing, so the
+    # default vglite firmware (CPU-composite) does not pay for it.
+    if(CONFIG_QT_VGLITE_GPU)
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_vglite_init.c"
+        )
+    endif()
+
+    # vg_lite QPaintEngine for QtWidgets / QPainter content: offloads the CPU
+    # QRasterPaintEngine fills (collidingmice ~88 ms paint) to the GC355.  The
+    # Stage-1 plugin's backing store picks it up via the weak hook
+    # qzephyr_make_vglite_paint_device().  Opt-in (needs the GPU bring-up).
+    if(CONFIG_QT_VGLITE_QPAINTENGINE)
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_vglite_paintengine.cpp"
+        )
+    endif()
+
+    set(_qsgv_dir "${CMAKE_CURRENT_LIST_DIR}/../src/qsg_vglite")
+    target_sources(app PRIVATE
+        "${_qsgv_dir}/qsg_vglite_adaptation.cpp"
+        "${_qsgv_dir}/qsgvglitecontext.cpp"
+        "${_qsgv_dir}/qsgvgliterenderloop.cpp"
+        "${_qsgv_dir}/qsgvgliterenderer.cpp"
+        "${_qsgv_dir}/qsgvglitetexture.cpp"
+        "${_qsgv_dir}/qsgvglitelayer.cpp"
+        "${_qsgv_dir}/qsgvgliterectanglenode.cpp"
+        "${_qsgv_dir}/qsgvgliteimagenode.cpp"
+        "${_qsgv_dir}/qsgvgliteglyphnode.cpp"
+        "${_qsgv_dir}/qsgvglitepainternode.cpp"
+        "${_qsgv_dir}/qsgvglitepublicnodes.cpp"
+        "${_qsgv_dir}/qsgvglitespritenode.cpp"
+    )
+
+    # Vivante vg_lite library (vendored from LVGL's bundle, which itself
+    # mirrors NXP MCUXpresso's `middleware/vglite`).  The LV_USE_VG_LITE_DRIVER
+    # / LV_VG_LITE_HAL_GPU_* defines come from us, not LVGL -- we sed'd the
+    # `#include "../../../lv_conf_internal.h"` line out of every source file
+    # so the library compiles standalone without LVGL.
+    set(_vg_lite_dir "${CMAKE_CURRENT_LIST_DIR}/../vg_lite")
+    target_sources(app PRIVATE
+        "${_vg_lite_dir}/VGLite/vg_lite.c"
+        "${_vg_lite_dir}/VGLite/vg_lite_image.c"
+        "${_vg_lite_dir}/VGLite/vg_lite_matrix.c"
+        "${_vg_lite_dir}/VGLite/vg_lite_path.c"
+        "${_vg_lite_dir}/VGLite/vg_lite_stroke.c"
+        "${_vg_lite_dir}/VGLiteKernel/vg_lite_kernel.c"
+        "${_vg_lite_dir}/hal/vg_lite_hal_zephyr.c"
+    )
+    target_include_directories(app PRIVATE
+        "${_vg_lite_dir}"
+        "${_vg_lite_dir}/inc"
+        "${_vg_lite_dir}/VGLite"
+        "${_vg_lite_dir}/VGLiteKernel"
+        "${_vg_lite_dir}/hal"
+    )
+    target_compile_definitions(app PRIVATE
+        LV_USE_VG_LITE_DRIVER=1
+        # Variant selection.  GC355 with revision 0x0_1216 is what the
+        # RT1176 ships per Slint memory + LVGL convention.  Confirm
+        # against the actual GPU CHIPID/REVISION readback at probe time.
+        LV_VG_LITE_HAL_GPU_SERIES=gc355
+        LV_VG_LITE_HAL_GPU_REVISION=0x0_1216
+        # GC355 register window base on iMX RT1176.  Placeholder until we
+        # wire this from the device tree -- the NXP reference manual
+        # places GPU2D at 0x41800000 on RT1170/RT1176.
+        LV_VG_LITE_HAL_GPU_BASE_ADDRESS=0x41800000U
+    )
+endif()
+
+if(CONFIG_QT_WIDGETS)
+    _qza_module_private_dir(QtWidgets _qza_widgets_private)
+    target_include_directories(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/include/QtWidgets"
+        "${_qza_widgets_private}"
+        "${_qza_widgets_private}/QtWidgets"
+    )
+endif()
+
+if(CONFIG_QT_QUICK_WIDGETS)
+    target_include_directories(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/include/QtQuickWidgets"
+    )
+endif()
+
+if(CONFIG_QT_XML)
+    target_include_directories(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/include/QtXml"
+    )
+endif()
+
+if(CONFIG_QT_NETWORK)
+    _qza_module_private_dir(QtNetwork _qza_network_private)
+    target_include_directories(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/include/QtNetwork"
+        "${_qza_network_private}"
+        "${_qza_network_private}/QtNetwork"
+    )
+    target_link_libraries(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/lib/libQt6Network.a"
+    )
+    target_sources(app PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_network_stubs.c"
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_poll.cpp"
+    )
+    if(CONFIG_QT_TLS)
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_tls_socket.cpp"
+        )
+        target_include_directories(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src"
+        )
+    endif()
+    if(CONFIG_QT_WOLFSSL)
+        target_link_libraries(app PRIVATE
+            "${QT_ZEPHYR_PREFIX}/plugins/tls/libqwolfsslbackend.a"
+            "${QT_ZEPHYR_PREFIX}/plugins/tls/objects-Release/QTlsBackendWolfSSLPlugin_init/QTlsBackendWolfSSLPlugin_init.cpp.obj"
+            "$ENV{HOME}/com/wolfssl/wolfssl/.install-arm/lib/libwolfssl.a"
+        )
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_wolfssl_plugin_import.cpp"
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_wolfssl_seed.c"
+        )
+        target_include_directories(app PRIVATE
+            "$ENV{HOME}/com/wolfssl/wolfssl/.install-arm/include"
+        )
+        target_compile_definitions(app PRIVATE WOLFSSL_USER_SETTINGS)
+    endif()
+    if(CONFIG_QT_MQTT)
+        set(_mqtt_src "$ENV{HOME}/io/qt/release/6.11.1/Src/qtmqtt/src/mqtt")
+        set(_mqtt_inc "${CMAKE_BINARY_DIR}/qtmqtt_inc")
+        file(MAKE_DIRECTORY "${_mqtt_inc}/QtMqtt")
+        file(GLOB _mqtt_hdrs "${_mqtt_src}/*.h")
+        foreach(_h ${_mqtt_hdrs})
+            get_filename_component(_name "${_h}" NAME)
+            if(NOT EXISTS "${_mqtt_inc}/QtMqtt/${_name}")
+                file(CREATE_LINK "${_h}" "${_mqtt_inc}/QtMqtt/${_name}" SYMBOLIC)
+            endif()
+        endforeach()
+        file(WRITE "${_mqtt_inc}/QtMqtt/qtmqttexports.h"
+            "#pragma once\n#define Q_MQTT_EXPORT\n#define Q_MQTT_PRIVATE_EXPORT\n")
+        target_sources(app PRIVATE
+            "${_mqtt_src}/qmqttauthenticationproperties.cpp"
+            "${_mqtt_src}/qmqttclient.cpp"
+            "${_mqtt_src}/qmqttconnection.cpp"
+            "${_mqtt_src}/qmqttconnectionproperties.cpp"
+            "${_mqtt_src}/qmqttcontrolpacket.cpp"
+            "${_mqtt_src}/qmqttmessage.cpp"
+            "${_mqtt_src}/qmqttpublishproperties.cpp"
+            "${_mqtt_src}/qmqttsubscription.cpp"
+            "${_mqtt_src}/qmqttsubscriptionproperties.cpp"
+            "${_mqtt_src}/qmqtttopicfilter.cpp"
+            "${_mqtt_src}/qmqtttopicname.cpp"
+            "${_mqtt_src}/qmqtttype.cpp"
+        )
+        target_include_directories(app PRIVATE "${_mqtt_src}" "${_mqtt_inc}")
+    endif()
 endif()
 
 # Link the qzephyr QPA plugin's static archive when QtGui is in use.

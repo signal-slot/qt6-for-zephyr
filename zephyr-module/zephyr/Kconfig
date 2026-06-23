@@ -30,10 +30,99 @@ config QT_QUICK_CONTROLS
 	default n
 	depends on QT_QML
 
+config QT_WIDGETS
+	bool "Build Qt Widgets applications (QWidget / QGraphicsView)"
+	default n
+	depends on QT_GUI
+	help
+	  Pull libQt6Widgets.a in.  Required by QtWidgets-based apps and
+	  by QQuickWidget-based apps that embed QML into a QWidget tree.
+
+config QT_QUICK_WIDGETS
+	bool "Link Qt QuickWidgets (QQuickWidget)"
+	default n
+	depends on QT_QML && QT_WIDGETS
+	help
+	  Pull libQt6QuickWidgets.a in -- the bridge that lets a QtQuick
+	  scene live inside a QWidget hierarchy.
+
+config QT_XML
+	bool "Link Qt Xml (QDomDocument / QXmlStreamReader)"
+	default n
+	help
+	  Pull libQt6Xml.a in.  For apps that parse / produce XML --
+	  e.g. cm5_v9_runtime reads its screen layouts as XML.
+
 config QT_SVG
 	bool "Link Qt SVG image-format plugin"
 	default n
 	depends on QT_GUI
+
+config QT_NETWORK
+	bool "Build Qt Network applications (QTcpSocket / QUdpSocket)"
+	default n
+	select NETWORKING
+	select NET_SOCKETS
+	# POSIX_NETWORKING is what exposes socket()/bind()/connect()/etc.
+	# in the POSIX namespace (the old NET_SOCKETS_POSIX_NAMES symbol
+	# is gone in current Zephyr).  It also `select`s NET_SOCKETS +
+	# NET_SOCKETPAIR + NET_INTERFACE_NAME for us.
+	select POSIX_API
+	select POSIX_NETWORKING
+	select NET_TCP
+	select NET_UDP
+	select NET_IPV4
+	select DNS_RESOLVER
+	help
+	  Pull libQt6Network.a in.  Provides QAbstractSocket / QTcpSocket /
+	  QUdpSocket / QHostInfo / QHostAddress / QNetworkInterface.  Pulls
+	  in Zephyr's BSD socket layer (CONFIG_NET_SOCKETS) under the POSIX
+	  names QtNetwork's qnativesocketengine_unix.cpp expects.  TLS
+	  (QSslSocket / QDtls) is gated separately on CONFIG_QT_NETWORK_TLS
+	  -- not yet implemented.
+
+config QT_TLS
+	bool "TLS transport via Zephyr mbedTLS (MQTTS / secure TCP)"
+	default n
+	depends on QT_NETWORK
+	select NET_SOCKETS_SOCKOPT_TLS
+	select TLS_CREDENTIALS
+	help
+	  Provide QZephyrTlsSocket: a QTcpSocket subclass that creates a
+	  Zephyr native TLS socket (IPPROTO_TLS_1_2) and configures
+	  mbedTLS via setsockopt(SOL_TLS, ...).  This enables transparent
+	  TLS without QSslSocket / OpenSSL.  Use with QtMqtt's
+	  setTransport() for MQTTS, or directly for any TLS TCP connection.
+	  Requires CONFIG_MBEDTLS=y and CONFIG_MBEDTLS_BUILTIN=y in prj.conf.
+
+config QT_WOLFSSL
+	bool "Qt 6 wolfSSL TLS backend (QSslSocket)"
+	default n
+	depends on QT_NETWORK
+	help
+	  Link the wolfSSL Qt TLS backend plugin (qwolfsslbackend) and
+	  libwolfssl.a.  This enables standard QSslSocket with wolfSSL
+	  as the cryptographic engine -- the same code path on both
+	  Linux and Zephyr.  Requires wolfSSL built standalone (not as
+	  a Zephyr module) at Stage 1.
+
+config QT_MQTT
+	bool "Qt MQTT client (QMqttClient)"
+	default n
+	depends on QT_NETWORK
+	help
+	  Compile Qt 6.11 QtMqtt module sources directly into the firmware.
+	  Combined with CONFIG_QT_TLS or CONFIG_QT_WOLFSSL, enables
+	  MQTTS (MQTT over TLS).
+
+config QT_NETWORK_IPV6
+	bool "Enable IPv6 in Qt Network"
+	default n
+	depends on QT_NETWORK
+	select NET_IPV6
+	help
+	  Add IPv6 to the Qt Network build.  Costs a noticeable amount of
+	  flash in Zephyr's IP stack.  Off by default for embedded SKUs.
 
 config QT_EMBEDDED_ROBOTO_FONT
 	bool "Embed Roboto-Regular TTF in the binary"
@@ -43,5 +132,153 @@ config QT_EMBEDDED_ROBOTO_FONT
 	  byte array and registering it via
 	  QFontDatabase::addApplicationFontFromData lets QPainter::drawText
 	  produce glyphs.  Costs ~350 KB of flash.
+
+config QT_VGLITE
+	bool "QtQuick scene graph via vg_lite (GC355 2D GPU)"
+	default n
+	depends on QT_QML
+	# GC355 + vendored vg_lite are i.MX RT11xx-specific; hidden on other SoCs so
+	# the board-agnostic core (CONFIG_QT_GUI, M7-only software raster) is unaffected.
+	depends on SOC_SERIES_IMXRT11XX
+	help
+	  Register the qt-zephyr-port vglite QSG adaptation so an app that
+	  sets QT_QUICK_BACKEND=vglite drives QtQuick rendering through the
+	  Verisilicon GC355 2D vector GPU on iMX RT1170 (via the vg_lite
+	  API) instead of the CPU raster software backend.
+
+	  This compiles in the standalone, software-independent QSGVGLite*
+	  backend (its own QSGContext / renderer / render loop / node set).
+	  By default it renders by CPU-compositing onto the framebuffer
+	  (correct and fast); enable CONFIG_QT_VGLITE_GPU to additionally
+	  bring up and use the GC355 GPU2D.  Opt-in per process via
+	  QT_QUICK_BACKEND=vglite at runtime.
+
+	  Requires CONFIG_QT_QML (QtQuick) because the scene graph only
+	  exists when QtQuick is in use.
+
+config QT_VGLITE_GPU
+	bool "Bring up and use the GC355 GPU2D for the vglite backend"
+	default n
+	depends on QT_VGLITE
+	select NOCACHE_MEMORY
+	select DYNAMIC_INTERRUPTS
+	help
+	  Compile the RT1170 GC355 bring-up (qzephyr_vglite_init.c): enable
+	  the GPU2D clock, reserve __nocache contiguous pools, wire the GPU2D
+	  interrupt, and let the vglite renderer dispatch native vg_lite ops
+	  (clear / blit) on the GC355.  Selects NOCACHE_MEMORY +
+	  DYNAMIC_INTERRUPTS, which the bring-up needs.
+
+	  Default n: the GC355 is validated (the probe reads CHIPID 0x355 and
+	  vg_lite_init succeeds), but for the current CPU-staged scenes routing
+	  through the GPU adds SDRAM-bus traffic without removing CPU raster, so
+	  it nets slower -- and NOCACHE_MEMORY alone perturbs the display-DMA
+	  timing.  Keep this off until the native per-primitive GPU paths land;
+	  even then it remains a per-process runtime choice (QT_VGLITE_GPU=1).
+
+config QT_PXP_PARTIAL_FLUSH
+	bool "Partial-region panel flush (push only the changed area to PXP)"
+	default n
+	depends on QT_GUI
+	depends on SOC_SERIES_IMXRT11XX   # ELCDIF PXP is RT11xx-specific
+	help
+	  Make QZephyrBackingStore::flush() push only the region that changed
+	  over the last two frames to display_write(), instead of the whole
+	  1.84 MB frame, so the LCDIF+PXP pipeline rotates/DMAs less per frame.
+	  The two-frame union keeps the alternate double-buffer coherent (a
+	  single-frame sub-rect leaves the other buffer one frame stale and
+	  trails -- the reason the earlier naive sub-rect attempt was reverted).
+
+	  MEASURED RESULT (2026-06-05, RT1170 + RK055, CONFIG_MCUX_ELCDIF_PXP_
+	  ROTATE_90): DO NOT ENABLE on this pipeline.  rect-rotate got *slower*
+	  (dma 20ms -> 37ms, 29.3 -> 19.6 fps) AND the panel showed a ghost/
+	  trail -- the PXP rotate path does not map a partial (x,y) sub-rect
+	  through the 90-deg rotation, and its per-call cost is not proportional
+	  to area (whole-frame is the efficient case).  The whole-frame flush is
+	  faster and correct here.  This knob is retained only for a future
+	  non-rotated panel or a fixed PXP driver; keep it default n.
+
+config QT_VGLITE_DISPLAY_ROTATE
+	bool "Offload the panel rotation to the GC355 (break the PXP fps ceiling)"
+	default n
+	depends on QT_GUI
+	depends on SOC_SERIES_IMXRT11XX   # GC355 + ELCDIF PXP are RT11xx-specific
+	select QT_VGLITE
+	select QT_VGLITE_GPU
+	help
+	  Rotate the rendered landscape frame to the panel-native portrait
+	  orientation on the GC355 2D GPU at present time, instead of letting the
+	  ELCDIF PXP rotate the whole frame on every scan-out.  The PXP whole-frame
+	  rotate is the ~29 fps ceiling (~20 ms DMA); a GC355 rotate-blit into a
+	  __nocache portrait double-buffer lets display_write scan out directly
+	  (~2.5 ms), so the frame rate is bounded by paint, not the rotate.
+
+	  Build with CONFIG_MCUX_ELCDIF_PXP_ROTATE_90=n (the GPU does the rotation
+	  now).  Works for any Qt backend (software / widgets / vglite) because it
+	  lives in the display present path.  Pulls in the GC355 bring-up
+	  (CONFIG_QT_VGLITE_GPU) and __nocache framebuffers.
+
+	  MEASURED RESULT (2026-06-06, RT1170 + RK055): DO NOT ENABLE for speed.
+	  The GC355 vg_lite rotate-blit of a full 1280x720 frame takes ~121 ms
+	  (7.3 fps) vs the ELCDIF PXP's ~20 ms (29 fps) -- the dedicated PXP 2D
+	  rotate engine is ~4x faster than a general-affine GPU blit, so offloading
+	  rotation to the GC355 makes it WORSE, not better.  The PXP whole-frame
+	  rotate is already the efficient path; ~29 fps is the structural floor for
+	  correctly-oriented tear-free output.  Kept default n / for reference only.
+
+config QT_VGLITE_QPAINTENGINE
+	bool "vg_lite QPaintEngine for QtWidgets/QPainter (GC355-accelerated fills)"
+	default n
+	depends on QT_GUI
+	depends on SOC_SERIES_IMXRT11XX   # GC355-specific
+	select QT_VGLITE
+	select QT_VGLITE_GPU
+	help
+	  Replace the CPU QRasterPaintEngine for the QtWidgets backing store with a
+	  vg_lite QPaintEngine that fills paths/rects/gradients on the GC355 2D GPU.
+	  QtWidgets / QGraphicsView vector content is heavily paint-bound on the
+	  Cortex-M7 (collidingmice measured ~88 ms paint / 8.4 fps), and the base
+	  QPaintEngineEx decomposes drawPath / fillRect / stroke / text into fill(),
+	  so accelerating fill() covers most QPainter drawing.  Unsupported ops
+	  (textures, radial gradients, complex clips, text) fall back to CPU raster
+	  into the same buffer.
+
+	  The Stage-1 QPA plugin's QZephyrBackingStore picks this up via the weak
+	  hook qzephyr_make_vglite_paint_device() (default firmware leaves it
+	  unresolved -> plain QImage raster, no change).  Pulls in the GC355
+	  bring-up.
+
+config QT_PXP_COMPOSITE
+	bool "PXP hardware compositor: blend a StaysOnTop overlay over the background"
+	default n
+	depends on QT_GUI
+	depends on SOC_SERIES_IMXRT11XX   # ELCDIF PXP is RT11xx-specific
+	select DMA_MCUX_PXP
+	help
+	  Drive the i.MX RT1170 ELCDIF PXP directly (fsl_pxp) to alpha-blend two Qt
+	  top-level windows in hardware: the normal window becomes the PXP process
+	  surface (PS, background) and a Qt::WindowStaysOnTopHint window becomes the
+	  alpha surface (AS, overlay), composited + rotated to the panel-native
+	  portrait orientation in a single PXP pass.  The background only repaints
+	  when it changes, so a static-background + small-dynamic-overlay UI offloads
+	  most of the per-frame compositing from the CPU to the PXP.
+
+	  BUILD REQUIREMENT: pass CONFIG_MCUX_ELCDIF_PXP=n on the build command line
+	  so the ELCDIF display driver does NOT also drive the PXP (we own it);
+	  display_write then just DMAs our composited portrait buffer to the panel.
+	  Touch routing to the correct window is handled by the QPA hit-test
+	  (qzephyr_touch_zephyr.cpp), keyed on the same WindowStaysOnTopHint flag.
+
+config QT_EXTERNAL_ROTATION
+	bool "Report landscape geometry (an external owner rotates at present time)"
+	default n
+	depends on QT_GUI
+	help
+	  Make QZephyrScreen report the landscape (swapped) geometry even when the
+	  panel is portrait and the ELCDIF driver is NOT doing the rotation, because
+	  some external owner rotates the frame at present time -- e.g. the M4-owned
+	  PXP compositor in examples/zephyr-rt1170-m4safety, where the M7 renders
+	  landscape, hands the frame to the M4, and the M4's PXP rotates + composites.
+	  Board-agnostic (it only affects the reported orientation).
 
 endif # QT
