@@ -58,6 +58,15 @@ config QT_SVG
 	default n
 	depends on QT_GUI
 
+config QT_SQL
+	bool "Qt SQL + SQLite (in-memory)"
+	default n
+	help
+	  Pull libQt6Sql.a and libqsqlite.a (bundled SQLite 3.51) in.
+	  Provides QSqlDatabase / QSqlQuery / QSqlTableModel with the
+	  SQLite driver.  Uses in-memory databases (:memory:) by default
+	  since Zephyr typically has no mounted filesystem.
+
 config QT_NETWORK
 	bool "Build Qt Network applications (QTcpSocket / QUdpSocket)"
 	default n

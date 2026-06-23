@@ -284,6 +284,23 @@ if(CONFIG_QT_XML)
     )
 endif()
 
+if(CONFIG_QT_SQL)
+    _qza_module_private_dir(QtSql _qza_sql_private)
+    target_include_directories(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/include/QtSql"
+        "${_qza_sql_private}"
+        "${_qza_sql_private}/QtSql"
+    )
+    target_link_libraries(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/lib/libQt6Sql.a"
+        "${QT_ZEPHYR_PREFIX}/plugins/sqldrivers/libqsqlite.a"
+        "${QT_ZEPHYR_PREFIX}/plugins/sqldrivers/objects-Release/QSQLiteDriverPlugin_init/QSQLiteDriverPlugin_init.cpp.obj"
+    )
+    target_sources(app PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_sqlite_plugin_import.cpp"
+    )
+endif()
+
 if(CONFIG_QT_NETWORK)
     _qza_module_private_dir(QtNetwork _qza_network_private)
     target_include_directories(app PRIVATE
