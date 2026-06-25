@@ -59,13 +59,17 @@ config QT_SVG
 	depends on QT_GUI
 
 config QT_SQL
-	bool "Qt SQL + SQLite (in-memory)"
+	bool "Qt SQL + SQLite (in-memory and file-based)"
 	default n
 	help
 	  Pull libQt6Sql.a and libqsqlite.a (bundled SQLite 3.51) in.
 	  Provides QSqlDatabase / QSqlQuery / QSqlTableModel with the
-	  SQLite driver.  Uses in-memory databases (:memory:) by default
-	  since Zephyr typically has no mounted filesystem.
+	  SQLite driver.  Supports both in-memory (:memory:) and
+	  file-based databases on FatFS-mounted storage (SD card).
+	  Includes POSIX compatibility stubs (lseek-beyond-EOF fix,
+	  pread/pwrite emulation, unix-none VFS) needed by SQLite on
+	  Zephyr.  Call qzephyr_sqlite_patch_vfs() before opening any
+	  file-based database.
 
 config QT_NETWORK
 	bool "Build Qt Network applications (QTcpSocket / QUdpSocket)"
@@ -132,6 +136,15 @@ config QT_NETWORK_IPV6
 	help
 	  Add IPv6 to the Qt Network build.  Costs a noticeable amount of
 	  flash in Zephyr's IP stack.  Off by default for embedded SKUs.
+
+config QT_MULTIMEDIA
+	bool "Qt Multimedia audio support (QAudioSink / QSoundEffect)"
+	default n
+	help
+	  Pull libQt6Multimedia.a in and provide the Zephyr I2S audio
+	  backend (qzephyr_audio_open / write / close).  Enables
+	  QAudioSink / QSoundEffect / QMediaDevices for audio output
+	  through the board's I2S codec (e.g. WM8962 on RT1170-EVKB).
 
 config QT_EMBEDDED_ROBOTO_FONT
 	bool "Embed Roboto-Regular TTF in the binary"

@@ -139,6 +139,21 @@ function(qt_zephyr_app)
     if(CONFIG_QT_SVG)
         list(APPEND _qza_components Svg)
     endif()
+    if(CONFIG_QT_WIDGETS)
+        list(APPEND _qza_components Widgets)
+    endif()
+    if(CONFIG_QT_QUICK_WIDGETS)
+        list(APPEND _qza_components QuickWidgets)
+    endif()
+    if(CONFIG_QT_XML)
+        list(APPEND _qza_components Xml)
+    endif()
+    if(CONFIG_QT_NETWORK)
+        list(APPEND _qza_components Network)
+    endif()
+    if(CONFIG_QT_MULTIMEDIA)
+        list(APPEND _qza_components Multimedia)
+    endif()
     find_package(Qt6 REQUIRED COMPONENTS ${_qza_components})
 
     # ----- override qt_add_executable ----------------------------------
@@ -241,6 +256,17 @@ function(qt_zephyr_app)
     # --whole-archive / --no-whole-archive linker flags without
     # leaking into adjacent libraries the way a hand-rolled mix would
     # after target_link_libraries de-duplication.
+    # Zero-touch official demos (e.g. demos/coffee) do QGuiApplication(argc,argv)
+    # with main()'s argc/argv, which Zephyr leaves as stack garbage -> the ctor
+    # faults.  Rename the app's main() to qt_zephyr_user_main() and supply a real
+    # Zephyr main(void) (qt_zephyr_main_shim.cpp) that calls it with a synthetic
+    # argv.  The shim is C++ so its qt_zephyr_user_main() reference name-mangles
+    # the same way as the app's (now ordinary, no longer the special "main") C++
+    # function.  Apps that build their own synthetic argv just ignore what we pass.
+    target_compile_definitions(${QZA_TARGET} PRIVATE "main=qt_zephyr_user_main")
+    target_sources(app PRIVATE
+        "${ZEPHYR_QT_ZEPHYR_PORT_MODULE_DIR}/src/qt_zephyr_main_shim.cpp")
+
     target_link_libraries(app PRIVATE
         "$<LINK_LIBRARY:WHOLE_ARCHIVE,${QZA_TARGET}>"
     )

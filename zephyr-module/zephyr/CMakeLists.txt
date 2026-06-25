@@ -284,6 +284,21 @@ if(CONFIG_QT_XML)
     )
 endif()
 
+if(CONFIG_QT_MULTIMEDIA)
+    _qza_module_private_dir(QtMultimedia _qza_multimedia_private)
+    target_include_directories(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/include/QtMultimedia"
+        "${_qza_multimedia_private}"
+        "${_qza_multimedia_private}/QtMultimedia"
+    )
+    target_link_libraries(app PRIVATE
+        "${QT_ZEPHYR_PREFIX}/lib/libQt6Multimedia.a"
+    )
+    target_sources(app PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_audio_zephyr.cpp"
+    )
+endif()
+
 if(CONFIG_QT_SQL)
     _qza_module_private_dir(QtSql _qza_sql_private)
     target_include_directories(app PRIVATE
@@ -298,7 +313,13 @@ if(CONFIG_QT_SQL)
     )
     target_sources(app PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_sqlite_plugin_import.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_sqlite_vfs_patch.c"
+        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_sqlite_posix_stubs.c"
     )
+    target_include_directories(app PRIVATE
+        "${QT_QTBASE_SOURCE}/src/3rdparty/sqlite"
+    )
+    zephyr_link_libraries("-Wl,--wrap=lseek" "-Wl,--wrap=read")
 endif()
 
 if(CONFIG_QT_NETWORK)
