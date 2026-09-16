@@ -187,6 +187,24 @@ function(qt_zephyr_app)
             list(APPEND _qaqm_args NO_PLUGIN)
         endif()
         qt6_add_qml_module(${_qaqm_target} ${_qaqm_args})
+        # Qt Quick 3D materials are compiled at run time by default, which
+        # needs a shader compiler on the target.  YakoGL has none (an
+        # offline table keyed by the GLSL text), so every Quick 3D app gets
+        # its materials pre-generated here by the host shadergen from the
+        # module's QML files -- what qt6_add_materials() does for apps that
+        # call it themselves (offlineshaders).  The generated .qsbc is what
+        # zephyr-module/tools/qsb2glsl turns into GLSL ES 1.00 sources for
+        # the table; variants shadergen cannot foresee (a texture map set
+        # at run time) are harvested from the console instead
+        # (tools/harvest-shaders.py).
+        if(COMMAND qt6_add_materials AND NOT TARGET ${_qaqm_target}_qz_materials)
+            cmake_parse_arguments(_qaqm "" "" "QML_FILES" ${_qaqm_args})
+            if(_qaqm_QML_FILES)
+                add_custom_target(${_qaqm_target}_qz_materials)   # marker: once per module
+                qt6_add_materials(${_qaqm_target} "qz_materials" PREFIX / FILES ${_qaqm_QML_FILES})
+                message(STATUS "qt_zephyr_app: Quick 3D materials pre-generated for ${_qaqm_target} (${_qaqm_QML_FILES})")
+            endif()
+        endif()
     endfunction()
 
     # Process the Qt app verbatim.
