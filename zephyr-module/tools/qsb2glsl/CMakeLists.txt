@@ -19,6 +19,14 @@ endif()
 find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 add_executable(qsb2glsl main.cpp)
 target_link_libraries(qsb2glsl PRIVATE Qt6::Core Qt6::Gui)
+# Qt Quick 3D's shadergen writes .qsbc collections; reading them needs
+# Quick3DUtils (private API). Optional: without Quick 3D on the host the
+# tool still handles .qsb files.
+find_package(Qt6 QUIET COMPONENTS Quick3DUtils)
+if(TARGET Qt6::Quick3DUtilsPrivate)
+    target_link_libraries(qsb2glsl PRIVATE Qt6::Quick3DUtilsPrivate)
+    target_compile_definitions(qsb2glsl PRIVATE HAVE_QSBC)
+endif()
 # QShader lives in the RHI headers, which Qt ships as "semi-public" under
 # the private include directories (rhi/qshader.h).
 if(TARGET Qt6::GuiPrivate)
