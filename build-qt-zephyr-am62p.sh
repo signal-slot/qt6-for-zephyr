@@ -374,6 +374,11 @@ CMAKE_OPTS=(
     "-DBUILD_qtshadertools=$(case ";${QT_SUBMODULES:-}" in *";qtshadertools;"*|*";qtshadertools") echo ON;; *) echo OFF;; esac)"
     "-DBUILD_qtquick3d=$(case ";${QT_SUBMODULES:-}" in *";qtquick3d;"*|*";qtquick3d") echo ON;; *) echo OFF;; esac)"
     "-DBUILD_qtquicktimeline=$(case ";${QT_SUBMODULES:-}" in *";qtquicktimeline;"*|*";qtquicktimeline") echo ON;; *) echo OFF;; esac)"
+    # Qt Quick 3D on the target: no assimp asset importer (a host tooling
+    # step; balsam converts assets on the host) and no OpenXR. Both are
+    # large and thread-based; the runtime renderer needs neither.
+    -DFEATURE_quick3d_assimp=OFF
+    -DFEATURE_quick3dxr_openxr=OFF
     # Do NOT build target-side host tools (qml runtime, qmlscene, qml-
     # easing, etc.) -- they are huge Qt apps in their own right and the
     # default Cortex-M7 linker script obviously cannot fit a 20+ MB
