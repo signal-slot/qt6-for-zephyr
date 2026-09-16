@@ -59,7 +59,16 @@ const struct device *dss()
 }
 
 // Put buffer `index` on the application plane; the flip takes effect at
-// the next vertical sync.  The first call enables the plane and output.
+// the next vertical sync.  The first call enables the output and the plane.
+//
+// Order matters on that first call: the driver arms the DSS GO bit (which
+// latches the plane's shadow registers at the next vsync) only while the
+// video port is enabled, so the output is enabled first and the plane's
+// buffer and enable are committed after it.  With the plane configured
+// before the output was on, nothing latched until some later flip: an
+// application that renders continuously (quick-hello) never noticed, one
+// that presents a single frame and waits for input (the Coffee demo) left
+// the panel dark while the scan-out buffer held the frame.
 int show(int index)
 {
     const struct device *dev = dss();
@@ -74,11 +83,13 @@ int show(int index)
         LOG_ERR("dss1 not ready");
         return -ENODEV;
     }
-    int rc = am62p_dss_set_app_buffer(dev, &plane);
+    int rc = 0;
+    if (!s_plane_on)
+        rc = am62p_dss_output_enable(dev, true);
+    if (rc == 0)
+        rc = am62p_dss_set_app_buffer(dev, &plane);
     if (rc == 0 && !s_plane_on) {
         rc = am62p_dss_enable_app_plane(dev, true);
-        if (rc == 0)
-            rc = am62p_dss_output_enable(dev, true);
         s_plane_on = (rc == 0);
         if (rc == 0)
             LOG_INF("application plane on: %dx%d XRGB8888, %d scan-out buffer(s)", FB_W, FB_H, FB_COUNT);
