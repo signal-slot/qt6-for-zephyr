@@ -34,6 +34,7 @@ extern "C" {
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 LOG_MODULE_REGISTER(qzephyr_dss, LOG_LEVEL_INF);
 
@@ -155,10 +156,55 @@ extern "C" bool qzephyr_gl_native_window(int index, struct gles_native_window *o
     return true;
 }
 
+#ifdef CONFIG_QT_DEBUG_LOG
+// Bring-up aid: sample the finished frame from the CPU at the QPA's
+// read-back points (the GPU is done by the time the QPA presents), every
+// 30th present for the first 600, so one boot yields many frames' worth of
+// evidence about a rendering bug being deterministic or not.
+static void sample_frame(int index)
+{
+    static int presents;
+    static const int pts[6][2] = { {8, 8}, {8, 591}, {200, 300}, {512, 80}, {512, 540}, {900, 300} };
+    char line[160];
+    int n = 0;
+
+    ++presents;
+    if (presents > 600 || presents % 30 != 1)
+        return;
+    for (const auto &p : pts) {
+        const uint8_t *px = s_fb[index] + size_t(p[1]) * FB_STRIDE + size_t(p[0]) * 4;
+        sys_cache_data_invd_range(const_cast<uint8_t *>(px), 64);
+        n += snprintf(line + n, sizeof(line) - size_t(n), " (%d,%d)=%02x%02x%02x",
+                      p[0], p[1], px[2], px[1], px[0]);
+    }
+    LOG_INF("present %d buf %d:%s", presents, index, line);
+    if (presents == 1 || presents == 31) {
+        // coarse luminance map of the frame: one character per 16x16
+        // block (64 x 38 for 1024x600), ' ' dark .. '@' bright
+        static const char ramp[] = " .:-=+*#%@";
+        for (int by = 0; by < FB_H / 16; ++by) {
+            char row[FB_W / 16 + 1];
+            for (int bx = 0; bx < FB_W / 16; ++bx) {
+                const uint8_t *px = s_fb[index] + size_t(by * 16 + 8) * FB_STRIDE + size_t(bx * 16 + 8) * 4;
+                sys_cache_data_invd_range(const_cast<uint8_t *>(px), 4);
+                int lum = (px[0] + px[1] + px[2]) / 3;
+                row[bx] = ramp[lum * 9 / 255];
+            }
+            row[FB_W / 16] = 0;
+            LOG_INF("map %02d |%s|", by, row);
+        }
+    }
+}
+#endif
+
 extern "C" void qzephyr_gl_present(int index)
 {
-    if (index >= 0 && index < FB_COUNT)
+    if (index >= 0 && index < FB_COUNT) {
+#ifdef CONFIG_QT_DEBUG_LOG
+        sample_frame(index);
+#endif
         show(index);
+    }
 }
 
 extern "C" unsigned int qzephyr_gl_vsync_count(void)
@@ -190,10 +236,13 @@ extern "C" void qzephyr_gl_wait_vsync(unsigned int count)
 // Debug aid (CONFIG_QT_DEBUG_LOG): the QPA switches the backend's per-draw
 // command-stream dump on for the first frames and off again, so the console
 // sees what each draw carried without being flooded at frame rate.
+extern "C" void gl_debug_set_attrib_dump(int on);   // YakoGL gl_draw.c (debug)
+
 extern "C" void qzephyr_gl_debug_set(int on)
 {
 #ifdef CONFIG_QT_DEBUG_LOG
     pvr_backend_set_option(PVR_BACKEND_OPT_DEBUG, on ? 1u : 0u);
+    gl_debug_set_attrib_dump(on);
 #else
     ARG_UNUSED(on);
 #endif

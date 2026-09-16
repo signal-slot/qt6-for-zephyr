@@ -1,0 +1,25 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * Toradex Verdin AM62P + the 7" DSI display's ILI2132A capacitive touch
+ * controller on I2C_2_DSI (main_i2c1), the wiring the SafeUI R5F board
+ * definition uses.  Opt-in (QT_TOUCH=1 in tools/west-build-am62p.sh, or
+ * -DEXTRA_DTC_OVERLAY_FILE=<this file> -DEXTRA_CONF_FILE=<the .conf>):
+ * the controller's reset line is the display's global reset, so the
+ * touch driver must initialise before the panel bridge (it does: input
+ * devices come up at the default device priority, the bridge at 95).
+ */
+
+/ {
+	chosen {
+		zephyr,touch = &touch;
+	};
+};
+
+&main_i2c1 {
+	touch: ili2132a@41 {
+		compatible = "ilitek,ili2132a";
+		reg = <0x41>;
+		irq-gpios = <&main_gpio0 38 GPIO_ACTIVE_HIGH>;  /* DSI_1_INT# */
+		rst-gpios = <&main_gpio0 35 GPIO_ACTIVE_LOW>;   /* I2S_2_BCLK: display global reset */
+	};
+};

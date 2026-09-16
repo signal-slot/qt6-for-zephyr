@@ -17,6 +17,11 @@ int __wrap_main(void)
 	static char arg0[] = "zephyr";
 	static char *argv[] = { arg0, 0 };
 
+	/* PCRE2's JIT (QRegularExpression, hence the QML engine) writes machine
+	 * code into heap memory and jumps to it.  On an MMU target Zephyr's
+	 * heap is not executable, so that jump is an instruction abort; Qt
+	 * honours this variable and falls back to the interpreter. */
+	setenv("QT_ENABLE_REGEXP_JIT", "0", 0);
 #ifdef CONFIG_QT_DEBUG_LOG
 	/* No shell to set environment variables on the board: turn on the Qt
 	 * Quick / RHI diagnostics the same way QSG_INFO=1 would. */

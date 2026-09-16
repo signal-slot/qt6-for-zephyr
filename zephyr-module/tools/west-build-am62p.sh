@@ -39,9 +39,18 @@ done
 
 MODULES="$FATFS_ROOT;$SAFEUI_ROOT;$PVR_ROOT;$PVR_ROOT/yakogl;$QT_MODULE"
 
+# QT_TOUCH=1: the DSI display's ILI2132A touch controller (opt-in while its
+# shared reset line with the panel bridge is being validated).
+TOUCH_ARGS=()
+if [ "${QT_TOUCH:-0}" = "1" ]; then
+    TOUCH_ARGS=(-DEXTRA_DTC_OVERLAY_FILE="$QT_MODULE/qt-app/boards/verdin_am62p_am62p54_a53_touch.overlay"
+                -DEXTRA_CONF_FILE="$QT_MODULE/qt-app/boards/verdin_am62p_am62p54_a53_touch.conf")
+fi
+
 set -x
 west build -p auto -b verdin_am62p/am62p54/a53 -d "$BUILD_DIR" "$QT_MODULE/qt-app" -- \
     -DZEPHYR_EXTRA_MODULES="$MODULES" \
     -DQT_APP_DIR="$QT_APP_DIR" \
     -DQT_HOST_PATH="$QT_HOST_PATH" \
+    "${TOUCH_ARGS[@]}" \
     "$@"
