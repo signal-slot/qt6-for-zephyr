@@ -120,6 +120,26 @@ function(qt_zephyr_app)
     list(APPEND CMAKE_PREFIX_PATH "$ENV{QT_ZEPHYR_PREFIX}")
     set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
 
+    # A Stage 1 built with OpenGL ES (build-qt-zephyr-am62p.sh) exports
+    # Qt6::Gui with EGL::EGL / GLESv2::GLESv2 dependencies that
+    # find_package(Qt6) resolves through Qt's own FindEGL / FindGLESv2.
+    # Point them at the stand-in SDK the Stage 1 install carries (YakoGL's
+    # headers + two empty archives); the real gl*/egl* symbols come from
+    # YakoGL's Zephyr module, linked whole into the firmware.
+    set(_qza_gl_sdk "$ENV{QT_ZEPHYR_PREFIX}/yakogl-sdk")
+    if(EXISTS "${_qza_gl_sdk}/lib/libEGL.a")
+        set(EGL_INCLUDE_DIR "${_qza_gl_sdk}/include" CACHE PATH "" FORCE)
+        set(EGL_LIBRARY "${_qza_gl_sdk}/lib/libEGL.a" CACHE FILEPATH "" FORCE)
+        set(GLESv2_INCLUDE_DIR "${_qza_gl_sdk}/include" CACHE PATH "" FORCE)
+        set(GLESv2_LIBRARY "${_qza_gl_sdk}/lib/libGLESv2.a" CACHE FILEPATH "" FORCE)
+        # The find modules also try_compile a tiny GL program.  Inside the
+        # Zephyr app build that test links a host-less executable and fails
+        # although the headers and (stand-in) archives are there; the
+        # result is a cached variable, so pre-answer it.
+        set(HAVE_EGL TRUE CACHE INTERNAL "YakoGL provides EGL (Stage 2)")
+        set(HAVE_GLESv2 TRUE CACHE INTERNAL "YakoGL provides GLESv2 (Stage 2)")
+    endif()
+
     # find_package(Qt6) at wrapper scope so Qt6::* imported targets are
     # globally visible -- needed so the generator expressions Qt bakes
     # into the app's link list (e.g. $<TARGET_PROPERTY:Qt6::Qml,...>)

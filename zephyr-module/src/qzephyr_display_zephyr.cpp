@@ -24,7 +24,6 @@
 // in qzephyr_make_event_dispatcher() below.  The header lives in
 // qtbase's source tree (it is not installed -- it's only needed by the
 // per-board Zephyr glue that lives in this module).
-#include "../../qtbase/src/corelib/kernel/qeventdispatcher_zephyr_p.h"
 
 LOG_MODULE_REGISTER(qzephyr_display, LOG_LEVEL_INF);
 
@@ -110,11 +109,6 @@ extern "C" bool qzephyr_display_query_caps(int *out_w, int *out_h, int *out_qfmt
 // during QPlatformIntegration::createEventDispatcher() while
 // QGuiApplication is being constructed.  We hand it a freshly-allocated
 // QEventDispatcherZephyr; QPlatformIntegration takes ownership.
-extern "C" QAbstractEventDispatcher *qzephyr_make_event_dispatcher()
-{
-    return new QEventDispatcherZephyr();
-}
-
 extern "C" void qzephyr_display_write(int x, int y, int w, int h,
                                        int pitch_bytes, int bytes_per_pixel,
                                        const void *buf)

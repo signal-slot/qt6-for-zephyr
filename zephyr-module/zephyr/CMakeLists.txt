@@ -56,7 +56,9 @@ target_sources(app PRIVATE
 # virtual call (wakeUp() from QCoreApplication::postEvent).  So generate the moc
 # explicitly and put it on the include path for the #include to pick up.
 find_program(QZ_MOC NAMES moc
-    HINTS "${QT_ZEPHYR_PREFIX}/libexec" "${QT_ZEPHYR_PREFIX}/bin"
+    HINTS "${QT_HOST_PATH}/libexec" "${QT_HOST_PATH}/bin"
+          "$ENV{QT_HOST_PATH}/libexec" "$ENV{QT_HOST_PATH}/bin"
+          "${QT_ZEPHYR_PREFIX}/libexec" "${QT_ZEPHYR_PREFIX}/bin"
           /usr/lib64/qt6/libexec /usr/lib/qt6/libexec /usr/lib/qt6/bin)
 if(NOT QZ_MOC)
     message(FATAL_ERROR "qt-zephyr-port: a host 'moc' is required to build "
@@ -87,15 +89,61 @@ if(CONFIG_QT_GUI)
     target_link_options(app PRIVATE "-Wl,-u,qz_keepalive_link_anchor")
 endif()
 
-# QPA plugin import + display-side glue (display_write /
-# display_get_capabilities hooks, QZephyrScreen format detection).
-# Only relevant when QtGui is in use; a Core-only firmware does not
-# need a platform integration nor a framebuffer driver.
+# Zephyr calls main() with no arguments; give the Qt application's
+# main(int, char **) a real argc/argv (see src/qzephyr_main_wrap.c).
+target_sources(app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_main_wrap.c")
+zephyr_link_libraries("-Wl,--wrap=main")
+
+if(CONFIG_QT_RESET_ON_FATAL)
+    target_sources(app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_fatal_reset.c")
+endif()
+
+# The event-dispatcher factory the qzephyr QPA calls through its weak
+# hook (it cannot `new QEventDispatcherZephyr` itself: the class header
+# includes <zephyr/kernel.h>).  Needed by every QGuiApplication.
+target_sources(app PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_dispatcher_glue.cpp"
+)
+
+# QPA plugin import + display-side glue (QZephyrScreen format / size,
+# QPainter frame output, and with CONFIG_QT_OPENGL the scan-out buffers
+# the GPU renders into).  Only relevant when QtGui is in use; a
+# Core-only firmware needs neither a platform integration nor a display.
 if(CONFIG_QT_GUI)
     target_sources(app PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_plugin_import.cpp"
-        "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_display_zephyr.cpp"
     )
+    if(CONFIG_QT_DISPLAY_ZEPHYR_API)
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_display_zephyr.cpp"
+        )
+    elseif(CONFIG_QT_DISPLAY_AM62P_DSS)
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_display_dss.cpp"
+        )
+        if(CONFIG_QT_DEBUG_LOG AND DEFINED ZEPHYR_YAKOGL_MODULE_DIR)
+            # the backend's debug option lives in a private YakoGL header
+            target_include_directories(app PRIVATE "${ZEPHYR_YAKOGL_MODULE_DIR}/src/pvr")
+        endif()
+    endif()
+endif()
+
+# OpenGL ES 2.0 through YakoGL.  Stage 1 must have been built against
+# YakoGL's headers (build-qt-zephyr-am62p.sh leaves its stand-in GL SDK
+# under the prefix as the marker); the GL entry points themselves come
+# from YakoGL's Zephyr module (CONFIG_YAKOGL), which Zephyr links whole.
+if(CONFIG_QT_OPENGL)
+    if(NOT EXISTS "${QT_ZEPHYR_PREFIX}/yakogl-sdk/lib/libEGL.a")
+        message(FATAL_ERROR
+            "CONFIG_QT_OPENGL=y but ${QT_ZEPHYR_PREFIX} was not built with "
+            "OpenGL ES support (no yakogl-sdk/ under the prefix): run "
+            "build-qt-zephyr-am62p.sh, or point QT_ZEPHYR_PREFIX at its install.")
+    endif()
+    if(NOT CONFIG_QT_DISPLAY_AM62P_DSS)
+        message(FATAL_ERROR
+            "CONFIG_QT_OPENGL=y needs a display glue that provides scan-out "
+            "buffers (CONFIG_QT_DISPLAY_AM62P_DSS).")
+    endif()
 endif()
 
 # Temporary heap diagnostics (2026-06-12): fill-on-free via --wrap=free so
@@ -387,8 +435,15 @@ endif()
 
 # Stage 1's libQt6Core.a was linked with -Wl,--unresolved-symbols=ignore-all
 # so QtCore TUs that reference UNIX-only filesystem entry points can resolve
-# at Stage 2.  Propagate the same flag here.
-zephyr_link_libraries(
-    "-Wl,--unresolved-symbols=ignore-all"
-    "-Wl,--warn-unresolved-symbols"
-)
+# at Stage 2.  Propagate the same flag on the 32-bit Cortex-M build, where an
+# unresolved call becomes a call to 0 that only faults if reached.  Not on
+# AArch64: there the image sits at 0x82000000 and a branch to 0 is out of
+# range (the link fails on the call anyway), while a data reference to 0
+# would still link silently -- so every symbol must resolve for real, and
+# the linker says which do not.
+if(CONFIG_ARM AND NOT CONFIG_ARM64)
+    zephyr_link_libraries(
+        "-Wl,--unresolved-symbols=ignore-all"
+        "-Wl,--warn-unresolved-symbols"
+    )
+endif()

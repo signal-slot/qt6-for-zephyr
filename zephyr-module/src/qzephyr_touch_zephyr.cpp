@@ -116,11 +116,8 @@ void process_event(input_event *evt, void *)
 INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_CHOSEN(zephyr_touch)),
                       process_event, NULL);
 
-// Strong def of the weak hook qeventdispatcher_zephyr.cpp calls each
-// iteration of processEvents().  Drains the QPA window-system event
-// queue so events posted by handleMouseEvent() actually reach QWindow.
-extern "C" void qzephyr_drain_qpa_events()
-{
-    QWindowSystemInterface::sendWindowSystemEvents(QEventLoop::AllEvents);
-}
+// The QPA window-system event queue (touch events posted here, expose /
+// geometry events posted by the QPA window) is drained by
+// qzephyr_drain_qpa_events() in qzephyr_dispatcher_glue.cpp, which is
+// compiled for every GUI firmware, with or without an input device.
 

@@ -133,6 +133,97 @@ config QT_NETWORK_IPV6
 	  Add IPv6 to the Qt Network build.  Costs a noticeable amount of
 	  flash in Zephyr's IP stack.  Off by default for embedded SKUs.
 
+config QT_OPENGL
+	bool "OpenGL ES 2.0 rendering on the GPU through YakoGL"
+	default n
+	depends on QT_GUI
+	depends on YAKOGL
+	help
+	  Render QtQuick (Qt's GLES2 RHI backend) and any QOpenGLContext user
+	  on the GPU through YakoGL, the OS-less OpenGL ES 2.0 + EGL library
+	  (github.com/signal-slot/yakogl; PowerVR BXS-4-64 on the TI AM62P).
+	  Needs a Stage 1 install built by build-qt-zephyr-am62p.sh (Qt with
+	  FEATURE_opengles2 + FEATURE_egl against YakoGL's headers) and a
+	  display glue that owns scan-out buffers (QT_DISPLAY_AM62P_DSS).
+	  The qzephyr QPA renders each frame into one of
+	  QT_SCANOUT_BUFFERS scan-out buffers and flips the display plane
+	  to it; the QPainter raster path (QtWidgets) keeps working next
+	  to it.  Every shader Qt uses must be in YakoGL's offline shader
+	  table (tools/qt_qsb_to_glsl.py extracts them from Stage 1's .qsb).
+
+choice QT_DISPLAY_GLUE
+	prompt "Display glue for the qzephyr QPA"
+	default QT_DISPLAY_AM62P_DSS if SAFEUI_DSS_AM62P
+	default QT_DISPLAY_ZEPHYR_API
+	depends on QT_GUI
+
+config QT_DISPLAY_ZEPHYR_API
+	bool "Zephyr display driver API (display_write on the chosen zephyr,display)"
+	help
+	  QPainter frames go to the board's Zephyr display driver with
+	  display_write() (RT1170 LCDIF + PXP, any CONFIG_DISPLAY driver).
+
+config QT_DISPLAY_AM62P_DSS
+	bool "SafeUI AM62P DSS application plane (scan-out buffers + flips)"
+	depends on SAFEUI_DSS_AM62P
+	help
+	  The Toradex Verdin AM62P through the SafeUI DSS/DSI/SN65DSI83
+	  drivers (slint-safe-ui-zephyr-verdin-am62p): Qt owns
+	  QT_SCANOUT_BUFFERS XRGB8888 buffers of QT_DSS_WIDTH x
+	  QT_DSS_HEIGHT in the image and points the DSS application plane
+	  at the one holding the latest frame.  QPainter frames are copied
+	  into a buffer; OpenGL frames (QT_OPENGL) are rendered straight
+	  into them by the GPU.
+
+endchoice
+
+config QT_DSS_WIDTH
+	int "Panel width in pixels"
+	default 1024
+	depends on QT_DISPLAY_AM62P_DSS
+
+config QT_DSS_HEIGHT
+	int "Panel height in pixels"
+	default 600
+	depends on QT_DISPLAY_AM62P_DSS
+
+config QT_SCANOUT_BUFFERS
+	int "Scan-out buffers (1: single, 2: double, 3: triple buffering)"
+	default 3
+	range 1 3
+	depends on QT_DISPLAY_AM62P_DSS
+	help
+	  Three lets the display scan one buffer while the GPU renders the
+	  next and the CPU records the third (the GPU driver samples run at
+	  the panel's 58 Hz this way).  Each buffer costs width x height x 4
+	  bytes of .noinit RAM.
+
+config QT_RESET_ON_FATAL
+	bool "Reset the SoC on a fatal error instead of halting"
+	default y
+	depends on REBOOT
+	help
+	  Replace k_sys_fatal_error_handler with one that reboots right after
+	  the fault dump.  For a board that is entered from another OS (kexec)
+	  and cannot be power-cycled remotely, this is what brings it back
+	  after a crash; the bounded watchdog feed stays as the net for hangs.
+
+config QT_DEBUG_LOG
+	bool "Enable Qt Quick / RHI / QPA diagnostics on the console (QSG_INFO)"
+	default n
+	help
+	  Set QSG_INFO=1 and QT_LOGGING_RULES for the scene graph, RHI and
+	  QPA categories before main() runs: which render loop and RHI
+	  backend were chosen, the GL strings, shader compile failures.
+
+config QT_ENV
+	string "Environment variables for the Qt application (NAME=value;NAME2=value2)"
+	default ""
+	help
+	  Set before main() runs.  Qt reads its runtime knobs from the
+	  environment (QSG_RENDER_LOOP, QSG_NO_DEPTH_BUFFER, QT_LOGGING_RULES,
+	  QSG_RENDERER_DEBUG, ...); a board has no shell to set them.
+
 config QT_EMBEDDED_ROBOTO_FONT
 	bool "Embed Roboto-Regular TTF in the binary"
 	default y

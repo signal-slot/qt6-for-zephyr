@@ -1,0 +1,37 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * Toradex Verdin AM62P (SafeUI board definition).  The board DTS has the
+ * GPU node with its 64 MiB carveout and the display path wired but
+ * disabled (the R5F owns the display in the SafeUI platform).  A Qt
+ * firmware drives the panel itself, so it enables DSS1, DSI, the bridge
+ * on I2C1, the GPIO banks and the TISCI power-on list -- the same set
+ * the GPU driver repository's samples/zephyr/gl_slint enables.
+ */
+
+&tisci_power_on {
+	status = "okay";
+};
+
+&main_gpio0_1 {
+	status = "okay";
+};
+
+&main_gpio1_0 {
+	status = "okay";
+};
+
+&main_i2c1 {
+	status = "okay";
+};
+
+&panel {
+	status = "okay";
+};
+
+&dss1 {
+	status = "okay";
+};
+
+&dsi0 {
+	status = "okay";
+};
