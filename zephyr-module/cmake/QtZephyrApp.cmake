@@ -173,6 +173,36 @@ function(qt_zephyr_app)
         # chains) created.
     endfunction()
 
+
+# qt6_add_materials() with one difference: a scene shadergen's QML parser
+# cannot evaluate (the lights example binds its materials through
+# expressions) yields no .qrc at all, and rcc then fails the build.  The
+# same shadergen command runs here, followed by a step that writes an empty
+# resource file when none was produced; the materials of such a scene come
+# from console harvesting instead (tools/harvest-shaders.py).
+function(_qt_zephyr_quick3d_materials _qzm_target)
+    set(_qzm_out_dir "${CMAKE_CURRENT_BINARY_DIR}/.rcc")
+    set(_qzm_qrc "${_qzm_out_dir}/generated_qz_materials.qrc")
+    set(_qzm_empty "${CMAKE_CURRENT_BINARY_DIR}/qz_materials_empty.cmake")
+    file(WRITE "${_qzm_empty}"
+        "if(NOT EXISTS \"${_qzm_qrc}\")\n"
+        "  file(WRITE \"${_qzm_qrc}\" \"<RCC><qresource prefix=\\\"/\\\"></qresource></RCC>\\n\")\n"
+        "  message(STATUS \"qt_zephyr_app: shadergen generated no materials for ${_qzm_target}\")\n"
+        "endif()\n")
+    _qt_internal_get_tool_wrapper_script_path(_qzm_wrapper)
+    add_custom_command(
+        OUTPUT "${_qzm_qrc}"
+        COMMAND "${_qzm_wrapper}" "$<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::shadergen>"
+                -C "${PROJECT_SOURCE_DIR}" -o "${_qzm_out_dir}" -r generated_qz_materials.qrc ${ARGN}
+        COMMAND ${CMAKE_COMMAND} -P "${_qzm_empty}"
+        DEPENDS $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::shadergen> ${ARGN}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        COMMENT "shadergen ${_qzm_target}"
+        VERBATIM
+    )
+    _qt_internal_quick3d_generate_resource_from_qrc(${_qzm_target} qz_materials)
+endfunction()
+
     # ----- override qt_add_qml_module ----------------------------------
     # When the backing target is STATIC (the case we set up above) and
     # the app did not pass NO_PLUGIN, Qt auto-creates a separate
@@ -198,10 +228,13 @@ function(qt_zephyr_app)
         # at run time) are harvested from the console instead
         # (tools/harvest-shaders.py).
         if(COMMAND qt6_add_materials AND NOT TARGET ${_qaqm_target}_qz_materials)
+            # QML_FILES ends at the next keyword (RESOURCES, IMPORTS, ...):
+            # keep the .qml entries only, shadergen wants nothing else.
             cmake_parse_arguments(_qaqm "" "" "QML_FILES" ${_qaqm_args})
+            list(FILTER _qaqm_QML_FILES INCLUDE REGEX "\\.qml$")
             if(_qaqm_QML_FILES)
                 add_custom_target(${_qaqm_target}_qz_materials)   # marker: once per module
-                qt6_add_materials(${_qaqm_target} "qz_materials" PREFIX / FILES ${_qaqm_QML_FILES})
+                _qt_zephyr_quick3d_materials(${_qaqm_target} ${_qaqm_QML_FILES})
                 message(STATUS "qt_zephyr_app: Quick 3D materials pre-generated for ${_qaqm_target} (${_qaqm_QML_FILES})")
             endif()
         endif()
