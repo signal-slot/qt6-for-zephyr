@@ -354,7 +354,12 @@ CMAKE_OPTS=(
     # *build* step does need qsb to pre-compile shaders that get
     # embedded in libQt6Quick.a's QRC, but that runs on the host via
     # QT_HOST_PATH/bin/qsb -- no need to cross-build a Cortex-M7 qsb.
-    "-DQT_BUILD_SUBMODULES=qtbase;qtdeclarative;qtsvg"
+    # QT_SUBMODULES (env) extends the set: Qt Quick 3D needs
+    # "qtbase;qtdeclarative;qtsvg;qtshadertools;qtquicktimeline;qtquick3d"
+    # (Quick 3D links QtShaderTools for its runtime material shader
+    # generation, so the target-side library is built then; see the
+    # BUILD_qtshadertools note below).
+    "-DQT_BUILD_SUBMODULES=${QT_SUBMODULES:-qtbase;qtdeclarative;qtsvg}"
     # Explicitly force these submodules ON.  An earlier Tier 2 build
     # configured this tree with -DBUILD_qtdeclarative=OFF and the cache
     # still carries it as UNINITIALIZED=OFF, which makes
@@ -366,7 +371,9 @@ CMAKE_OPTS=(
     # errors when cross-built without full libstdc++ threads.  Skip the
     # target build -- the only thing qtdeclarative actually needs from
     # qtshadertools is the host `qsb` tool, which lives in QT_HOST_PATH.
-    -DBUILD_qtshadertools=OFF
+    "-DBUILD_qtshadertools=$(case ";${QT_SUBMODULES:-}" in *";qtshadertools;"*|*";qtshadertools") echo ON;; *) echo OFF;; esac)"
+    "-DBUILD_qtquick3d=$(case ";${QT_SUBMODULES:-}" in *";qtquick3d;"*|*";qtquick3d") echo ON;; *) echo OFF;; esac)"
+    "-DBUILD_qtquicktimeline=$(case ";${QT_SUBMODULES:-}" in *";qtquicktimeline;"*|*";qtquicktimeline") echo ON;; *) echo OFF;; esac)"
     # Do NOT build target-side host tools (qml runtime, qmlscene, qml-
     # easing, etc.) -- they are huge Qt apps in their own right and the
     # default Cortex-M7 linker script obviously cannot fit a 20+ MB

@@ -12,6 +12,7 @@
 #include <zephyr/device.h>
 #include <zephyr/input/input.h>
 #include <stdlib.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/logging/log.h>
 
@@ -163,6 +164,19 @@ void tap_thread(void *, void *, void *)
         input_report_abs(dev, INPUT_ABS_Y, (int32_t)y, false, K_FOREVER);
         input_report_key(dev, INPUT_BTN_TOUCH, 0, true, K_FOREVER);
         spec = (*end == '/') ? end + 1 : end;
+    }
+    // QZEPHYR_REBOOT_AFTER=<ms>: a scripted demo image hands the board back
+    // (reset -> Linux -> the next kexec) that long after the thread started,
+    // instead of holding it until the watchdog bound expires.
+    const char *rb = getenv("QZEPHYR_REBOOT_AFTER");
+    if (rb && *rb) {
+        long at = strtol(rb, nullptr, 10);
+        int64_t wait = t0 + at - k_uptime_get();
+        if (wait > 0)
+            k_sleep(K_MSEC(wait));
+        printk("[tap] QZEPHYR_REBOOT_AFTER reached: rebooting\n");
+        k_sleep(K_MSEC(50));
+        sys_reboot(SYS_REBOOT_COLD);
     }
 }
 

@@ -38,7 +38,7 @@ int __wrap_main(void)
 		char *save = NULL;
 
 		memcpy(env, CONFIG_QT_ENV, sizeof(env));
-		for (char *kv = strtok_r(env, ";", &save); kv; kv = strtok_r(NULL, ";", &save)) {
+		for (char *kv = strtok_r(env, ";|", &save); kv; kv = strtok_r(NULL, ";|", &save)) {   /* '|' too: a ';' does not survive west's -DCONFIG_ path (CMake list) */
 			char *eq = strchr(kv, '=');
 
 			if (eq) {
