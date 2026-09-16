@@ -26,7 +26,7 @@ int __wrap_main(void)
 	/* No shell to set environment variables on the board: turn on the Qt
 	 * Quick / RHI diagnostics the same way QSG_INFO=1 would. */
 	setenv("QSG_INFO", "1", 1);
-	setenv("QT_LOGGING_RULES", "qt.scenegraph.general=true;qt.rhi.general=true;qt.qpa.*=true", 1);
+	setenv("QT_LOGGING_RULES", "qt.scenegraph.general=true;qt.rhi.general=true;qt.qpa.*=true;qt.quick3d.*=true", 1);   /* the last one is silent without Quick 3D */
 	setenv("QZEPHYR_FRAME_LOG", "1", 1);   /* qzephyrwindow.cpp: a line per 60 frames + GL errors */
 #endif
 #ifdef CONFIG_QT_ENV
