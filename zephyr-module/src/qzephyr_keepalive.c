@@ -44,7 +44,7 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 	uint64_t prev_busy = 0, prev_all = 0;
 #endif
 	uint32_t prev_kicks = 0, prev_waits = 0, prev_tk = 0;
-	uint64_t prev_lat = 0, prev_busy = 0;
+	uint64_t prev_lat = 0, prev_gbusy = 0;
 	int64_t prev_up = 0;
 	for (;;) {
 		k_msleep(10000);
@@ -85,11 +85,11 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 			yakogl_zephyr_gpu_times(&tk, &lat, &lat_max, &busy);
 			if (up > prev_up && tk > prev_tk)
 				printk("[hb] gpu busy %u%%, kick latency avg %u ms max %u ms\n",
-				       (unsigned)((busy - prev_busy) * 100u / (uint64_t)(up - prev_up)),
+				       (unsigned)((busy - prev_gbusy) * 100u / (uint64_t)(up - prev_up)),
 				       (unsigned)((lat - prev_lat) / (tk - prev_tk)), (unsigned)lat_max);
 			prev_tk = tk;
 			prev_lat = lat;
-			prev_busy = busy;
+			prev_gbusy = busy;
 			prev_up = up;
 		}
 		if (yakogl_debug_last_call) {
