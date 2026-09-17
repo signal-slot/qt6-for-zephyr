@@ -99,8 +99,58 @@ channel masked off for stencil clips) are already in the `BLENDS` list.
 
 Not covered: shaders that need `GL_OES_standard_derivatives` (Qt only selects
 the `_fwidth` text variants when the extension is advertised, which YakoGL does
-not), `samplerCube`, nested struct uniforms, and any `ShaderEffect` whose GLSL
-is not in the table (add its `.qsb` output the same way).
+not), and any `ShaderEffect` whose GLSL is not in the table (add its `.qsb`
+output the same way).
+
+`GLSL2USC_CACHE=<dir>` keeps the compiler output keyed by the compiled text,
+stage, blend variant and compiler binary: a regeneration after adding a few
+shaders then takes seconds instead of the half hour the whole table costs.
+
+### OpenGL ES 3.0 (Qt Quick 3D)
+
+Since 2026-09-17 YakoGL reports `OpenGL ES 3.0` (an EGL client version 2 or 3
+request gets the same context; Qt reads the version back from `GL_VERSION`).
+Qt's RHI decides from the major version alone whether it may use instancing,
+`texelFetch`, float/depth textures, texture arrays, mip levels as render
+targets and `glMapBufferRange`, and Qt Quick 3D ships its skybox, image based
+lighting and shadow shaders only as GLSL ES 3.00: on an ES 2.0 context those
+demos cannot work. Qt Quick's own shaders stay GLSL ES 1.00 (the RHI tries the
+300 es variant of a `.qsb` first and falls back), so the table holds both.
+
+What the core provides on top of ES 2.0, and how:
+
+- `qsb2glsl` extracts the 300 es variant when a `.qsb` has one; the run-time
+  generated Quick 3D materials come from the Stage 2 shadergen pre-generation
+  and from harvesting the console (`tools/harvest-shaders.py`) as before.
+- `glsl2usc.py` translates GLSL ES 3.00 declarations (layout locations, in/out,
+  flat, the ES 3.0 sampler and integer types) to the Vulkan GLSL `pco_shc`
+  compiles; `gl_VertexID`/`gl_InstanceID` land in vtxin registers the PDS
+  vertex fetch writes (driver `pvr_pds_render_vertex_program_ids`).
+- Cube maps and 2D texture arrays are stored as one linear texture with the
+  six faces / the layers stacked vertically (mip levels stacked the same way)
+  and the translator rewrites the sampling into face/layer arithmetic
+  (`pvr_cube*`, `pvr_arr*` helpers; an array's layer count is the hidden
+  uniform `pvr_layers_<sampler>` the core fills at draw time). The TPU's real
+  cube/array types need the twiddled memory layout this core does not write.
+  `glFramebufferTexture2D` with a face target, `glFramebufferTextureLayer` and
+  mip levels attach that sub-rectangle as the render target.
+- Instanced draws loop over the instances feeding the divisor attributes as
+  constants (fine for a few instances; thousands need a PDS instance-rate
+  stream). No MSAA render buffers (`GL_MAX_SAMPLES` 1), no program binaries.
+- Float texel formats (RGBA16F light probes, R16F shadow maps) are stored as
+  RGBA8 for now: HDR values clamp, shadow depth has 8 bits.
+
+`gl_test` cases 41 (`es3cube`), 42 (`es3array`) and 43 (`es3vid`) cover the
+emulation and the vertex id on the board.
+
+Bring-up knobs in our `qtbase`: `QT_RHI_GLES_CTX_MAJOR=2` makes the RHI behave
+as on ES 2.0 whatever the driver reports, `QT_RHI_GLES_DISABLE_CAPS=a,b,c`
+clears single capabilities. Both go through `CONFIG_QT_ENV` (a fresh Stage 2
+build directory: `west build -p auto` keeps an existing `.config`).
+
+Judge a frame by the panel camera or the `fbdump` PNG (`tools/fbdump2png.py`),
+never by the six sampled pixels the display glue prints: on Coffee's start
+screen all six sit on the background.
 
 ## Status
 
