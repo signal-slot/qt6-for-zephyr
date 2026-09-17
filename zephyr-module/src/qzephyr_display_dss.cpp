@@ -204,7 +204,9 @@ static void sample_frame(int index)
             printk("fbdump %d %d:%s\n", presents, ty, row);
         }
     }
-    if (presents == 331) {
+    if (presents == 31) {
+        // (present 31: every demo reaches it inside the 120 s watchdog bound,
+        // and the UI text is up by then)
         // A full-resolution crop ("fbcrop N y:hex"): text and 1-pixel detail
         // the thumbnail cannot show. QZ_FBDUMP_CROP="x,y,w,h" (CONFIG_QT_ENV)
         // picks the region, default the top-left 256x150; w is capped at 256.
