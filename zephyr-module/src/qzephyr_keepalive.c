@@ -28,6 +28,7 @@
  * absent in a raster-only firmware). */
 const char *yakogl_debug_last_call(uint32_t *seq) __attribute__((weak));
 void pvr_backend_counters(uint32_t *kicks, uint32_t *waits) __attribute__((weak));
+void pvr_backend_workload(uint32_t *draws, uint32_t *tiles) __attribute__((weak));
 void yakogl_zephyr_gpu_times(uint32_t *kicks, uint64_t *lat_sum_ms, uint32_t *lat_max_ms,
 			     uint64_t *busy_ms) __attribute__((weak));
 
@@ -43,7 +44,7 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 #ifdef CONFIG_SCHED_THREAD_USAGE_ALL
 	uint64_t prev_busy = 0, prev_all = 0;
 #endif
-	uint32_t prev_kicks = 0, prev_waits = 0, prev_tk = 0;
+	uint32_t prev_kicks = 0, prev_waits = 0, prev_tk = 0, prev_draws = 0, prev_tiles = 0;
 	uint64_t prev_lat = 0, prev_gbusy = 0;
 	int64_t prev_up = 0;
 	for (;;) {
@@ -69,11 +70,18 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 		if (pvr_backend_counters) {
 			uint32_t kicks = 0, waits = 0;
 
+			uint32_t draws = 0, tiles = 0;
+
 			pvr_backend_counters(&kicks, &waits);
-			printk("[hb] gpu: %u kicks, %u blocking waits in the last beat\n",
-			       (unsigned)(kicks - prev_kicks), (unsigned)(waits - prev_waits));
+			if (pvr_backend_workload)
+				pvr_backend_workload(&draws, &tiles);
+			printk("[hb] gpu: %u kicks, %u draws, %u tiles, %u blocking waits in the last beat\n",
+			       (unsigned)(kicks - prev_kicks), (unsigned)(draws - prev_draws),
+			       (unsigned)(tiles - prev_tiles), (unsigned)(waits - prev_waits));
 			prev_kicks = kicks;
 			prev_waits = waits;
+			prev_draws = draws;
+			prev_tiles = tiles;
 		}
 		if (yakogl_zephyr_gpu_times) {
 			/* GPU load: the share of the beat some kick was outstanding,
