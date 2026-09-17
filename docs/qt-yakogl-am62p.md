@@ -134,14 +134,41 @@ What the core provides on top of ES 2.0, and how:
   cube/array types need the twiddled memory layout this core does not write.
   `glFramebufferTexture2D` with a face target, `glFramebufferTextureLayer` and
   mip levels attach that sub-rectangle as the render target.
-- Instanced draws loop over the instances feeding the divisor attributes as
-  constants (fine for a few instances; thousands need a PDS instance-rate
-  stream). No MSAA render buffers (`GL_MAX_SAMPLES` 1), no program binaries.
-- Float texel formats (RGBA16F light probes, R16F shadow maps) are stored as
-  RGBA8 for now: HDR values clamp, shadow depth has 8 bits.
+- Instanced draws run on the GPU when every per-instance array has divisor 1
+  (Qt Quick 3D's instancing tables): the VDM index list carries the instance
+  count and the PDS vertex fetch indexes those arrays by the instance number
+  (driver `pvr_pds_vertex_stream.per_instance`,
+  `pvr_vdm_emit_index_list_instanced`). Other divisors loop over the
+  instances with the per-instance values fed as constants. No MSAA render
+  buffers (`GL_MAX_SAMPLES` 1, so Qt never asks for a resolve blit), no
+  program binaries.
+- Float textures and render targets: RGBA16F, R16F and R32F are stored as
+  such (TPU F16/F32 texel formats); a fragment shader that renders into one
+  is a table variant compiled for that output class (blend key bits 30..31,
+  `glsl2usc.py` specs `replace@f16x4` etc.), and the PBE packs with the
+  matching mode. A float target is cleared by a full-screen quad through the
+  clear shader: the background object leaves its pixels untouched on
+  silicon. `glReadPixels` reads float targets as clamped RGBA8 or as
+  RGBA/FLOAT.
+- The GL scissor is pixel exact: each scissored object names an entry of the
+  kick's ISP scissor table (`ISPCTL.scenable`, `CR_ISP_SCISSOR_BASE`) besides
+  the tile-granular region clip.
+- Dynamic indexing of uniform arrays compiles (the `pco_shc` harness sizes the
+  push-constant range from the block), so Quick 3D's light loops stay loops;
+  unrolled, the shadowed lights shader was 51 000 USC dwords, now 6 000.
+- Program slots are 512 with the uniform blocks allocated per program at
+  link: Quick 3D keeps a program per pipeline (cascaded shadow maps used up
+  160).
 
-`gl_test` cases 41 (`es3cube`), 42 (`es3array`) and 43 (`es3vid`) cover the
-emulation and the vertex id on the board.
+`gl_test` cases 41 (`es3cube`), 42 (`es3array`), 43 (`es3vid`), 44 (`es3hdr`,
+float targets, clear-only frames, scissor), 45 (`es3dyn`, dynamic uniform
+indexing), 46 (`es3size`, `textureSize`) and 47 (`es3inst`, instancing)
+cover this on the board.
+
+The shader compiler harness lives in YakoGL's `tools/pco_shc/` (sources that
+go into a Mesa 26.2.1 tree, plus the usclib patch that makes `textureSize()`
+read the linear STRIDE image layout). Every machine that regenerates the table
+must use the same harness build.
 
 Bring-up knobs in our `qtbase`: `QT_RHI_GLES_CTX_MAJOR=2` makes the RHI behave
 as on ES 2.0 whatever the driver reports, `QT_RHI_GLES_DISABLE_CAPS=a,b,c`
@@ -150,7 +177,19 @@ build directory: `west build -p auto` keeps an existing `.config`).
 
 Judge a frame by the panel camera or the `fbdump` PNG (`tools/fbdump2png.py`),
 never by the six sampled pixels the display glue prints: on Coffee's start
-screen all six sit on the background.
+screen all six sit on the background. With `CONFIG_QT_DEBUG_LOG` the glue
+prints 128x75 thumbnails at presents 31 and 331, a full-resolution 256x150
+crop at present 31 (`QZ_FBDUMP_CROP="x,y,w,h"` moves it), and both again as
+tag 0 once the UI has not presented for 3 s (a static scene renders once).
+The keep-alive beat adds the CPU load and the GPU kicks per 10 s. The lab
+camera resets its exposure when a stream starts: set
+`exposure_time_absolute` while streaming.
+
+Picolibc lacks `fopen64`/`fseeko64`/`ftello64`/`chdir`/`getpwnam`, which the
+Quick 3D asset importer plugin and `QFileDialog` reference; an undefined
+function fails an AArch64 link even with `--unresolved-symbols=ignore-all`
+(the call cannot reach address 0), so `src/qzephyr_libc_compat.c` provides
+weak fallbacks.
 
 ## Status
 
