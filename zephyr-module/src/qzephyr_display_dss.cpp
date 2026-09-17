@@ -189,7 +189,7 @@ static void sample_frame(int index)
                       p[0], p[1], px[2], px[1], px[0]);
     }
     LOG_INF("present %d buf %d:%s", presents, index, line);
-    if (presents == 31 || presents == 331) {
+    if (presents == 2 || presents == 31 || presents == 331) {   // 2: a UI that idles after its first frames
         // a 128x75 RGB thumbnail of the frame as hex rows ("fbdump N y:..."),
         // decoded on the host by zephyr-module/tools/fbdump2png.py: the only
         // exact picture of what the panel shows (the lab camera saturates)
