@@ -22,6 +22,10 @@
  * the Qt app's main() needs --whole-archive).
  */
 #include <zephyr/kernel.h>
+#include <stdint.h>
+
+/* YakoGL's call tracer (weak: absent in a raster-only firmware). */
+const char *yakogl_debug_last_call(uint32_t *seq) __attribute__((weak));
 
 int qz_keepalive_link_anchor;
 
@@ -35,6 +39,14 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 	for (;;) {
 		k_msleep(10000);
 		printk("[hb] alive #%u uptime=%lld ms\n", ++n, k_uptime_get());
+		if (yakogl_debug_last_call) {
+			/* where the GL client is: a stalled main thread shows the same
+			 * call and count beat after beat */
+			uint32_t seq = 0;
+			const char *call = yakogl_debug_last_call(&seq);
+
+			printk("[hb] gl: last call %s, %u calls\n", call ? call : "?", (unsigned)seq);
+		}
 	}
 }
 

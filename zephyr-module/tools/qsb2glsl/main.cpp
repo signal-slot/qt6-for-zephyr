@@ -75,8 +75,14 @@ int main(int argc, char **argv)
     }
     files.sort();
 
+    // The variant QRhiGles2 picks on YakoGL's OpenGL ES 3.0 context: the
+    // GLSL 300 es text when the shader has one, else the 100 es text (Qt
+    // Quick's shaders are 100 es only; Qt Quick 3D's built-ins are 300 es
+    // only or both, and the run-time generated materials carry both).
     const QShaderKey keys[] = {
+        QShaderKey(QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs), QShader::StandardShader),
         QShaderKey(QShader::GlslShader, QShaderVersion(100, QShaderVersion::GlslEs), QShader::StandardShader),
+        QShaderKey(QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs), QShader::BatchableVertexShader),
         QShaderKey(QShader::GlslShader, QShaderVersion(100, QShaderVersion::GlslEs), QShader::BatchableVertexShader),
     };
 
@@ -136,17 +142,22 @@ int main(int argc, char **argv)
         if (!shader.isValid())
             continue;
 
+        bool haveStandard = false, haveBatchable = false;
         for (const QShaderKey &key : keys) {
             if (key.sourceVariant() == QShader::BatchableVertexShader && shader.stage() != QShader::VertexStage)
                 continue;
+            // one text per variant: the first (highest) version present
+            if (key.sourceVariant() == QShader::StandardShader ? haveStandard : haveBatchable)
+                continue;
             const QShaderCode code = shader.shader(key);
             if (code.shader().isEmpty()) {
-                if (key.sourceVariant() == QShader::StandardShader) {
-                    fprintf(stderr, "qsb2glsl: %s has no GLSL 100 es variant\n", qPrintable(file));
+                if (key.sourceVariant() == QShader::StandardShader && key.sourceVersion().version() == 100) {
+                    fprintf(stderr, "qsb2glsl: %s has no GLSL ES variant\n", qPrintable(file));
                     ++skipped;
                 }
                 continue;
             }
+            (key.sourceVariant() == QShader::StandardShader ? haveStandard : haveBatchable) = true;
             const QByteArray text = code.shader();
             const QByteArray sha = QCryptographicHash::hash(text, QCryptographicHash::Sha256).toHex();
             if (written.contains(sha))
@@ -164,6 +175,6 @@ int main(int argc, char **argv)
             ++count;
         }
     }
-    out << count << " shader sources" << (listOnly ? " (not written)" : "") << ", " << skipped << " .qsb without GLSL 100 es" << Qt::endl;
+    out << count << " shader sources" << (listOnly ? " (not written)" : "") << ", " << skipped << " .qsb without GLSL ES" << Qt::endl;
     return 0;
 }
