@@ -92,6 +92,10 @@ endif()
 # Zephyr calls main() with no arguments; give the Qt application's
 # main(int, char **) a real argc/argv (see src/qzephyr_main_wrap.c).
 target_sources(app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_main_wrap.c")
+# Weak libc fallbacks (fopen64/fseeko64/ftello64/chdir/getpwnam) for Qt code
+# that is linked but not used meaningfully on the target: the Quick 3D asset
+# importer plugin and QFileDialog. See the file for why the link needs them.
+target_sources(app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_libc_compat.c")
 zephyr_link_libraries("-Wl,--wrap=main")
 
 if(CONFIG_QT_RESET_ON_FATAL)
