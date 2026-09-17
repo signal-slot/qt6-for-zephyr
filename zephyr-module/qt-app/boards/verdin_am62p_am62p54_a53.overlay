@@ -8,6 +8,25 @@
  * the GPU driver repository's samples/zephyr/gl_slint enables.
  */
 
+/* A 256 MiB GPU carveout instead of the board's 64 MiB one: Qt Quick 3D's
+ * image based lighting (512x512 RGBA16F cube maps with their mip chains),
+ * shadow maps and render targets did not fit (2026-09-17). Linux on the
+ * module reserves nothing from 0xa0000000 up (OP-TEE ends there), and the
+ * firmware is kexec'ed, so that DDR is ours. The board's 64 MiB region
+ * stays reserved but unused. */
+/ {
+	reserved-memory {
+		gpu_carveout_qt: gpu-carveout@a0000000 {
+			reg = <0xa0000000 0x10000000>;
+			no-map;
+		};
+	};
+};
+
+&gpu {
+	memory-region = <&gpu_carveout_qt>;
+};
+
 &tisci_power_on {
 	status = "okay";
 };
