@@ -175,8 +175,8 @@ extern "C" bool qzephyr_gl_native_window(int index, struct gles_native_window *o
 static void sample_frame(int index)
 {
     static int presents;
-    static const int pts[6][2] = { {8, 8}, {8, 591}, {200, 300}, {512, 80}, {512, 540}, {900, 300} };
-    char line[160];
+    static const int pts[8][2] = { {8, 8}, {8, 591}, {200, 300}, {512, 80}, {512, 540}, {900, 300}, {512, 300}, {420, 240} };   // the last two: scene centre (a Quick 3D model)
+    char line[220];
     int n = 0;
 
     ++presents;
@@ -189,6 +189,20 @@ static void sample_frame(int index)
                       p[0], p[1], px[2], px[1], px[0]);
     }
     LOG_INF("present %d buf %d:%s", presents, index, line);
+    if (presents == 31 || presents == 331) {
+        // a 128x75 RGB thumbnail of the frame as hex rows ("fbdump N y:..."),
+        // decoded on the host by zephyr-module/tools/fbdump2png.py: the only
+        // exact picture of what the panel shows (the lab camera saturates)
+        for (int ty = 0; ty < 75; ++ty) {
+            char row[128 * 6 + 1];
+            for (int tx = 0; tx < 128; ++tx) {
+                const uint8_t *px = s_fb[index] + size_t(ty * 8) * FB_STRIDE + size_t(tx * 8) * 4;
+                sys_cache_data_invd_range(const_cast<uint8_t *>(px), 4);
+                snprintf(row + tx * 6, 7, "%02x%02x%02x", px[2], px[1], px[0]);
+            }
+            printk("fbdump %d %d:%s\n", presents, ty, row);
+        }
+    }
     if (presents == 1 || presents == 31) {
         // coarse luminance map of the frame: one character per 16x16
         // block (64 x 38 for 1024x600), ' ' dark .. '@' bright
