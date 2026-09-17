@@ -46,5 +46,43 @@ while i < len(lines):
         i = j
     else:
         i += 1
+# YakoGL's own copy of a missing shader: "shsrc <sha16> <line>.<chunk>:<text>" lines and
+# "shsrc <sha16> end <lines> <bytes>" (the chunks are reassembled by index, so other
+# output interleaving between them does not matter)
+src_re = re.compile(rb'shsrc ([0-9a-f]{16}) (\d+)\.(\d+):(.*)$')
+end_re = re.compile(rb'shsrc ([0-9a-f]{16}) end (\d+) (\d+)')
+chunks, ends = {}, {}
+for l in lines:
+    l = l.rstrip(b'\r')
+    m = src_re.search(l)
+    if m:
+        chunks.setdefault(m.group(1).decode(), {})[(int(m.group(2)), int(m.group(3)))] = m.group(4)
+        continue
+    m = end_re.search(l)
+    if m:
+        ends[m.group(1).decode()] = (int(m.group(2)), int(m.group(3)))
+for sha16, (nlines, nbytes) in ends.items():
+    full = next((w for w in want if w.startswith(sha16)), None)
+    got = chunks.get(sha16, {})
+    if not full or any(f.startswith(sha16) for f in os.listdir(out)):
+        continue
+    text_lines = []
+    ok = True
+    for ln in range(nlines):
+        parts = sorted(k for k in got if k[0] == ln)
+        if not parts or [k[1] for k in parts] != list(range(len(parts))):
+            ok = False
+            break
+        text_lines.append(b''.join(got[k] for k in parts))
+    if not ok:
+        continue
+    body = b'\n'.join(text_lines)
+    for cand in (body + b'\n', body):
+        if len(cand) == nbytes and hashlib.sha256(cand).hexdigest() == full:
+            name = '%s.%s' % (full[:16], 'vert' if want[full] == 'vertex' else 'frag')
+            open(os.path.join(out, name), 'wb').write(cand)
+            print('harvested', name, len(cand), 'bytes (yakogl copy)')
+            found += 1
+            break
 missing = [s for s in want if not any(f.startswith(s[:16]) for f in os.listdir(out))]
 print('%d shader(s) harvested; %d still missing: %s' % (found, len(missing), ' '.join(m[:16] for m in missing)))
