@@ -35,6 +35,7 @@ extern "C" {
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 LOG_MODULE_REGISTER(qzephyr_dss, LOG_LEVEL_INF);
 
@@ -201,6 +202,28 @@ static void sample_frame(int index)
                 snprintf(row + tx * 6, 7, "%02x%02x%02x", px[2], px[1], px[0]);
             }
             printk("fbdump %d %d:%s\n", presents, ty, row);
+        }
+    }
+    if (presents == 331) {
+        // A full-resolution crop ("fbcrop N y:hex"): text and 1-pixel detail
+        // the thumbnail cannot show. QZ_FBDUMP_CROP="x,y,w,h" (CONFIG_QT_ENV)
+        // picks the region, default the top-left 256x150; w is capped at 256.
+        int cx = 0, cy = 0, cw = 256, ch = 150;
+        if (const char *e = getenv("QZ_FBDUMP_CROP"))
+            sscanf(e, "%d,%d,%d,%d", &cx, &cy, &cw, &ch);
+        if (cw > 256) cw = 256;
+        if (cx < 0) cx = 0;
+        if (cy < 0) cy = 0;
+        if (cx + cw > FB_W) cw = FB_W - cx;
+        if (cy + ch > FB_H) ch = FB_H - cy;
+        printk("fbcrop %d origin %d,%d size %dx%d\n", presents, cx, cy, cw, ch);
+        for (int y = 0; y < ch; ++y) {
+            char row[256 * 6 + 1];
+            const uint8_t *line = s_fb[index] + size_t(cy + y) * FB_STRIDE + size_t(cx) * 4;
+            sys_cache_data_invd_range(const_cast<uint8_t *>(line), size_t(cw) * 4);
+            for (int x = 0; x < cw; ++x)
+                snprintf(row + x * 6, 7, "%02x%02x%02x", line[x * 4 + 2], line[x * 4 + 1], line[x * 4]);
+            printk("fbcrop %d %d:%s\n", presents, y, row);
         }
     }
     if (presents == 1 || presents == 31) {
