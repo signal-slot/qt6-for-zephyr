@@ -28,6 +28,8 @@
  * absent in a raster-only firmware). */
 const char *yakogl_debug_last_call(uint32_t *seq) __attribute__((weak));
 void pvr_backend_counters(uint32_t *kicks, uint32_t *waits) __attribute__((weak));
+void yakogl_zephyr_gpu_times(uint32_t *kicks, uint64_t *lat_sum_ms, uint32_t *lat_max_ms,
+			     uint64_t *busy_ms) __attribute__((weak));
 
 int qz_keepalive_link_anchor;
 
@@ -41,7 +43,9 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 #ifdef CONFIG_SCHED_THREAD_USAGE_ALL
 	uint64_t prev_busy = 0, prev_all = 0;
 #endif
-	uint32_t prev_kicks = 0, prev_waits = 0;
+	uint32_t prev_kicks = 0, prev_waits = 0, prev_tk = 0;
+	uint64_t prev_lat = 0, prev_busy = 0;
+	int64_t prev_up = 0;
 	for (;;) {
 		k_msleep(10000);
 		printk("[hb] alive #%u uptime=%lld ms\n", ++n, k_uptime_get());
@@ -70,6 +74,23 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 			       (unsigned)(kicks - prev_kicks), (unsigned)(waits - prev_waits));
 			prev_kicks = kicks;
 			prev_waits = waits;
+		}
+		if (yakogl_zephyr_gpu_times) {
+			/* GPU load: the share of the beat some kick was outstanding,
+			 * and each kick's submit-to-completion time */
+			uint32_t tk = 0, lat_max = 0;
+			uint64_t lat = 0, busy = 0;
+			int64_t up = k_uptime_get();
+
+			yakogl_zephyr_gpu_times(&tk, &lat, &lat_max, &busy);
+			if (up > prev_up && tk > prev_tk)
+				printk("[hb] gpu busy %u%%, kick latency avg %u ms max %u ms\n",
+				       (unsigned)((busy - prev_busy) * 100u / (uint64_t)(up - prev_up)),
+				       (unsigned)((lat - prev_lat) / (tk - prev_tk)), (unsigned)lat_max);
+			prev_tk = tk;
+			prev_lat = lat;
+			prev_busy = busy;
+			prev_up = up;
 		}
 		if (yakogl_debug_last_call) {
 			/* where the GL client is: a stalled main thread shows the same
