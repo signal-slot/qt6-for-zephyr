@@ -340,11 +340,28 @@ extern "C" void qzephyr_gl_wait_vsync(unsigned int count)
 // sees what each draw carried without being flooded at frame rate.
 extern "C" void gl_debug_set_attrib_dump(int on);   // YakoGL gl_draw.c (debug)
 
+#ifdef CONFIG_QT_DEBUG_LOG
+// The QPA turns the dump off after its second frame, which a static scene
+// never presents: every later draw (a QML incubator adding models, say)
+// then printed ~30 lines and the demo crawled. The dump also ends 3 s after
+// it started, whatever the frame count.
+static void debug_dump_expired(struct k_timer *)
+{
+    pvr_backend_set_option(PVR_BACKEND_OPT_DEBUG, 0u);
+    gl_debug_set_attrib_dump(0);
+}
+static K_TIMER_DEFINE(s_debug_timer, debug_dump_expired, nullptr);
+#endif
+
 extern "C" void qzephyr_gl_debug_set(int on)
 {
 #ifdef CONFIG_QT_DEBUG_LOG
     pvr_backend_set_option(PVR_BACKEND_OPT_DEBUG, on ? 1u : 0u);
     gl_debug_set_attrib_dump(on);
+    if (on)
+        k_timer_start(&s_debug_timer, K_SECONDS(3), K_NO_WAIT);
+    else
+        k_timer_stop(&s_debug_timer);
 #else
     ARG_UNUSED(on);
 #endif
