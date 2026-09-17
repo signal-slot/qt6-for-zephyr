@@ -5,11 +5,22 @@ full-resolution crops ("fbcrop <present> <row>:<hex rgb>") as <prefix>-crop-<pre
 import re, sys
 from PIL import Image
 log, prefix = sys.argv[1], sys.argv[2]
+PIX = re.compile(r'([0-9a-f]{6})(?:\*(\d+)\.)?')
+
+def expand(row):
+    """hex RGB row, a run written as rrggbb*N. -> flat hex"""
+    out = []
+    for m in PIX.finditer(row):
+        out.append(m.group(1) * (int(m.group(2)) if m.group(2) else 1))
+    return ''.join(out)
+
 frames = {}
 for line in open(log, 'rb').read().decode('latin-1').splitlines():
-    m = re.match(r'fbdump (\d+) (\d+):([0-9a-f]{768})\s*$', line.strip())
+    m = re.match(r'fbdump (\d+) (\d+):([0-9a-f*.0-9]+)\s*$', line.strip())
     if m:
-        frames.setdefault(int(m.group(1)), {})[int(m.group(2))] = m.group(3)
+        row = expand(m.group(3))
+        if len(row) == 768:
+            frames.setdefault(int(m.group(1)), {})[int(m.group(2))] = row
 for n, rows in sorted(frames.items()):
     img = Image.new('RGB', (128, 75))
     for y, hexrow in rows.items():
@@ -22,9 +33,11 @@ for n, rows in sorted(frames.items()):
 
 crops = {}
 for line in open(log, 'rb').read().decode('latin-1').splitlines():
-    m = re.match(r'fbcrop (\d+) (\d+):([0-9a-f]+)\s*$', line.strip())
-    if m and len(m.group(3)) % 6 == 0:
-        crops.setdefault(int(m.group(1)), {})[int(m.group(2))] = m.group(3)
+    m = re.match(r'fbcrop (\d+) (\d+):([0-9a-f*.0-9]+)\s*$', line.strip())
+    if m:
+        row = expand(m.group(3))
+        if row and len(row) % 6 == 0:
+            crops.setdefault(int(m.group(1)), {})[int(m.group(2))] = row
 for n, rows in sorted(crops.items()):
     w = max(len(r) for r in rows.values()) // 6
     h = max(rows) + 1

@@ -172,21 +172,40 @@ extern "C" bool qzephyr_gl_native_window(int index, struct gles_native_window *o
 // Bring-up aid: the finished frame as the CPU sees it at the QPA's read-back
 // points (the GPU is done by the time the QPA presents).
 
-// A 128x75 RGB thumbnail as hex rows ("fbdump TAG y:..."), decoded on the host
-// by zephyr-module/tools/fbdump2png.py: the exact picture of what the panel
+// Rows are hex RGB, a repeated pixel as "rrggbb*N." (the serial console is
+// slow: a UI is mostly flat areas, and every second printing stalls rendering).
+// Decoded on the host by zephyr-module/tools/fbdump2png.py.
+static bool s_dumping;   // the idle dump must not start while a dump prints
+
+static void print_row(const char *kind, int tag, int y, const uint8_t *px, int n, int step)
+{
+    static char row[256 * 12 + 1];   // one dump at a time (s_dumping)
+    int o = 0;
+    for (int x = 0; x < n;) {
+        const uint8_t *p = px + size_t(x) * size_t(step) * 4;
+        int run = 1;
+        while (x + run < n && memcmp(px + size_t(x + run) * size_t(step) * 4, p, 3) == 0)
+            ++run;
+        o += snprintf(row + o, sizeof(row) - size_t(o), "%02x%02x%02x", p[2], p[1], p[0]);
+        if (run > 1)
+            o += snprintf(row + o, sizeof(row) - size_t(o), "*%d.", run);
+        x += run;
+    }
+    printk("%s %d %d:%s\n", kind, tag, y, row);
+}
+
+// A 128x75 thumbnail ("fbdump TAG y:..."): the exact picture of what the panel
 // shows (the lab camera saturates). TAG is the present number, 0 for the idle
 // dump below.
 static void dump_thumbnail(int index, int tag)
 {
+    s_dumping = true;
     for (int ty = 0; ty < 75; ++ty) {
-        char row[128 * 6 + 1];
-        for (int tx = 0; tx < 128; ++tx) {
-            const uint8_t *px = s_fb[index] + size_t(ty * 8) * FB_STRIDE + size_t(tx * 8) * 4;
-            sys_cache_data_invd_range(const_cast<uint8_t *>(px), 4);
-            snprintf(row + tx * 6, 7, "%02x%02x%02x", px[2], px[1], px[0]);
-        }
-        printk("fbdump %d %d:%s\n", tag, ty, row);
+        const uint8_t *line = s_fb[index] + size_t(ty * 8) * FB_STRIDE;
+        sys_cache_data_invd_range(const_cast<uint8_t *>(line), FB_STRIDE);
+        print_row("fbdump", tag, ty, line, 128, 8);
     }
+    s_dumping = false;
 }
 
 // A full-resolution crop ("fbcrop TAG y:hex"): text and 1-pixel detail the
@@ -202,32 +221,38 @@ static void dump_crop(int index, int tag)
     if (cy < 0) cy = 0;
     if (cx + cw > FB_W) cw = FB_W - cx;
     if (cy + ch > FB_H) ch = FB_H - cy;
+    s_dumping = true;
     printk("fbcrop %d origin %d,%d size %dx%d\n", tag, cx, cy, cw, ch);
     for (int y = 0; y < ch; ++y) {
-        char row[256 * 6 + 1];
         const uint8_t *line = s_fb[index] + size_t(cy + y) * FB_STRIDE + size_t(cx) * 4;
         sys_cache_data_invd_range(const_cast<uint8_t *>(line), size_t(cw) * 4);
-        for (int x = 0; x < cw; ++x)
-            snprintf(row + x * 6, 7, "%02x%02x%02x", line[x * 4 + 2], line[x * 4 + 1], line[x * 4]);
-        printk("fbcrop %d %d:%s\n", tag, y, row);
+        print_row("fbcrop", tag, y, line, cw, 1);
     }
+    s_dumping = false;
 }
 
 // A UI that stops presenting (a static Quick 3D scene renders once and idles)
 // never reaches the later dump points: 3 s without a present dumps the frame
-// on screen once, as tag 0.
+// on screen once, as tag 0. A low-priority thread of its own watches for that
+// (the system work queue's stack is too small for the printing).
 static int s_idle_index = -1;
 static bool s_idle_dumped;
-static void idle_dump(struct k_work *)
+static int64_t s_last_present_ms;
+static void idle_watch(void *, void *, void *)
 {
-    if (s_idle_dumped || s_idle_index < 0)
-        return;
-    s_idle_dumped = true;
-    printk("fbidle: no present for 3 s, dumping buffer %d\n", s_idle_index);
-    dump_thumbnail(s_idle_index, 0);
-    dump_crop(s_idle_index, 0);
+    for (;;) {
+        k_msleep(500);
+        if (s_idle_dumped || s_idle_index < 0 || s_dumping ||
+            k_uptime_get() - s_last_present_ms < 3000)
+            continue;
+        s_idle_dumped = true;
+        printk("fbidle: no present for 3 s, dumping buffer %d\n", s_idle_index);
+        dump_thumbnail(s_idle_index, 0);
+        dump_crop(s_idle_index, 0);
+    }
 }
-static K_WORK_DELAYABLE_DEFINE(s_idle_work, idle_dump);
+K_THREAD_DEFINE(qz_fbidle_tid, 4096, idle_watch, nullptr, nullptr, nullptr,
+                K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
 
 // Every 30th present for the first 600: one boot yields many frames' worth of
 // evidence about a rendering bug being deterministic or not.
@@ -240,8 +265,8 @@ static void sample_frame(int index)
 
     ++presents;
     s_idle_index = index;
-    k_work_reschedule(&s_idle_work, K_SECONDS(3));
-    if (presents > 600 || presents % 30 != 1)
+    s_last_present_ms = k_uptime_get();
+    if (presents > 600 || presents % 30 != 1 || s_dumping)
         return;
     for (const auto &p : pts) {
         const uint8_t *px = s_fb[index] + size_t(p[1]) * FB_STRIDE + size_t(p[0]) * 4;
@@ -270,6 +295,7 @@ static void sample_frame(int index)
             LOG_INF("map %02d |%s|", by, row);
         }
     }
+    s_last_present_ms = k_uptime_get();   // the dumps above take seconds: not idle
 }
 #endif
 
