@@ -358,8 +358,11 @@ extern "C" void qzephyr_gl_debug_set(int on)
 #ifdef CONFIG_QT_DEBUG_LOG
     pvr_backend_set_option(PVR_BACKEND_OPT_DEBUG, on ? 1u : 0u);
     gl_debug_set_attrib_dump(on);
+    /* The backend also caps the dump at a number of draws, so a first frame
+     * that takes seconds to arrive is still dumped; the timer is the upper
+     * bound for a scene that keeps drawing. */
     if (on)
-        k_timer_start(&s_debug_timer, K_SECONDS(3), K_NO_WAIT);
+        k_timer_start(&s_debug_timer, K_SECONDS(30), K_NO_WAIT);
     else
         k_timer_stop(&s_debug_timer);
 #else
