@@ -191,6 +191,30 @@ function fails an AArch64 link even with `--unresolved-symbols=ignore-all`
 (the call cannot reach address 0), so `src/qzephyr_libc_compat.c` provides
 weak fallbacks.
 
+### The parameter buffer a 3D scene fills
+
+A tile based GPU tiles the whole frame before it shades any of it, and the
+per-tile primitive lists go into the parameter buffer: pages the Parameter
+Manager takes from a firmware freelist. A Qt Quick 3D scene is the first
+content here big enough to run that buffer dry, and the firmware then posts
+`FREELIST_GROW` on its own CCB and parks the render until the host answers on
+the KCCB.
+
+Two things were wrong. The answer carried KCCB command 110, the number
+mainline Linux uses, while the DDK 25.2 firmware this driver boots numbers
+`FREELIST_GROW_UPDATE` 108 -- 110 is `NOTIFY_WRITE_OFFSET_UPDATE`, so the
+firmware consumed the answer, changed nothing, and stayed in SPM "wait for
+grow" forever. That single number is what made about twenty of the examples
+end in `fence N timeout`. And each freelist kept its own small reserve, so
+even a correct answer ran out early; growth now comes from one pool shared by
+every freelist, a quarter of the GPU carveout.
+
+What is left is scenes whose tiling outgrows any pool this board can spare:
+`simplefog` draws 2000 instances of `#Sphere`, about ten million triangles in
+one kick, and spends 84 MiB of parameter buffer without finishing. The
+firmware's own answer to that is a partial render (SPM), which this driver
+does not yet set up.
+
 ## Status
 
 See the git log of the three repositories; verification is on the board
