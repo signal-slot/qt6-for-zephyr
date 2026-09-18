@@ -209,11 +209,35 @@ end in `fence N timeout`. And each freelist kept its own small reserve, so
 even a correct answer ran out early; growth now comes from one pool shared by
 every freelist, a quarter of the GPU carveout.
 
+Three more things the examples needed, each found the same way -- by asking
+the hardware rather than guessing. A framebuffer-to-texture copy (Quick 3D's
+SCREEN_TEXTURE, which `custommaterial` samples every frame) went through
+`glReadPixels` in chunks of 64 pixels, and each of those flushed the frame,
+waited for the fence and invalidated the whole surface: the example never
+finished a frame. Qt reads bone matrices and morph targets from a texture in
+the VERTEX shader, and this core only wired the fragment stage's samplers, so
+`skinning` drew a white band and `morphing` faulted the geometry data master;
+with vertex-stage descriptors `morphing` runs 1381 frames in 48 seconds. And a
+kick with nothing to tile left its region headers as it found them, which on a
+freshly allocated render-target set is zeros, so the fragment phase's ISP
+parameter fetch followed a null pointer.
+
 What is left is scenes whose tiling outgrows any pool this board can spare:
 `simplefog` draws 2000 instances of `#Sphere`, about ten million triangles in
 one kick, and spends 84 MiB of parameter buffer without finishing. The
 firmware's own answer to that is a partial render (SPM), which this driver
-does not yet set up.
+does not yet set up, so the host splits such a kick itself: past a primitive
+budget the frame is flushed and the next kick loads its colour and depth back,
+and a single instanced draw that big is split by instances (each chunk's
+per-instance stream starting at its own first instance). gl_test case 52 draws
+the same thing whole and split and compares the pixels. A draw that reads
+gl_InstanceID is never split, because the vertex fetch numbers instances per
+index list and the ID would restart in every chunk.
+
+The IBL and effects examples (principledmaterial, reflectionprobes,
+sceneeffects, screenspacereflections, runtimeloader) still end in a hardware
+recovery whose fault bank names the ISP parameter fetch on a kick whose
+geometry phase tiled nothing -- the next thread to pull.
 
 ## Status
 
