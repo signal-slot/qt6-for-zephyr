@@ -31,6 +31,8 @@ void pvr_backend_counters(uint32_t *kicks, uint32_t *waits) __attribute__((weak)
 void pvr_backend_workload(uint32_t *draws, uint32_t *tiles) __attribute__((weak));
 void yakogl_zephyr_gpu_times(uint32_t *kicks, uint64_t *lat_sum_ms, uint32_t *lat_max_ms,
 			     uint64_t *busy_ms) __attribute__((weak));
+/* [0..5] performance counters, [6] CR_TIMER (one tick = 256 core clocks). */
+void pvr_render_perf_read(uint32_t out[7]) __attribute__((weak));
 
 int qz_keepalive_link_anchor;
 
@@ -45,6 +47,8 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 	uint64_t prev_busy = 0, prev_all = 0;
 #endif
 	uint32_t prev_kicks = 0, prev_waits = 0, prev_tk = 0, prev_draws = 0, prev_tiles = 0;
+	uint32_t prev_timer = 0;
+	int64_t prev_timer_up = 0;
 	uint64_t prev_lat = 0, prev_gbusy = 0;
 	int64_t prev_up = 0;
 	for (;;) {
@@ -99,6 +103,23 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 			prev_lat = lat;
 			prev_gbusy = busy;
 			prev_up = up;
+		}
+		if (pvr_render_perf_read) {
+			/* What the GPU core clock really is: CR_TIMER counts one
+			 * tick per 256 core clocks, so the beat's tick delta over
+			 * its wall-clock time is the rate the work ran at. */
+			uint32_t perf[7];
+			int64_t up = k_uptime_get();
+
+			pvr_render_perf_read(perf);
+			if (prev_timer_up && up > prev_timer_up)
+				printk("[hb] gpu core clock %u MHz (timer %u ticks in %u ms)\n",
+				       (unsigned)(((uint64_t)(perf[6] - prev_timer) * 256u) /
+						  (uint64_t)((up - prev_timer_up) * 1000)),
+				       (unsigned)(perf[6] - prev_timer),
+				       (unsigned)(up - prev_timer_up));
+			prev_timer = perf[6];
+			prev_timer_up = up;
 		}
 		if (yakogl_debug_last_call) {
 			/* where the GL client is: a stalled main thread shows the same
