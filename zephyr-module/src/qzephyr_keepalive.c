@@ -29,6 +29,7 @@
 const char *yakogl_debug_last_call(uint32_t *seq) __attribute__((weak));
 void pvr_backend_counters(uint32_t *kicks, uint32_t *waits) __attribute__((weak));
 void pvr_backend_workload(uint32_t *draws, uint32_t *tiles) __attribute__((weak));
+void pvr_backend_overhead(uint32_t *quads, uint32_t *splits) __attribute__((weak));
 void yakogl_zephyr_gpu_times(uint32_t *kicks, uint64_t *lat_sum_ms, uint32_t *lat_max_ms,
 			     uint64_t *busy_ms) __attribute__((weak));
 /* [0..5] performance counters, [6] CR_TIMER (one tick = 256 core clocks). */
@@ -47,7 +48,8 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 	uint64_t prev_busy = 0, prev_all = 0;
 #endif
 	uint32_t prev_kicks = 0, prev_waits = 0, prev_tk = 0, prev_draws = 0, prev_tiles = 0;
-	uint32_t prev_timer = 0;
+	uint32_t prev_quads = 0, prev_splits = 0;
+	uint32_t prev_timer = 0, prev_perf[6] = { 0 };
 	int64_t prev_timer_up = 0;
 	uint64_t prev_lat = 0, prev_gbusy = 0;
 	int64_t prev_up = 0;
@@ -74,14 +76,20 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 		if (pvr_backend_counters) {
 			uint32_t kicks = 0, waits = 0;
 
-			uint32_t draws = 0, tiles = 0;
+			uint32_t draws = 0, tiles = 0, quads = 0, splits = 0;
 
 			pvr_backend_counters(&kicks, &waits);
 			if (pvr_backend_workload)
 				pvr_backend_workload(&draws, &tiles);
+			if (pvr_backend_overhead)
+				pvr_backend_overhead(&quads, &splits);
 			printk("[hb] gpu: %u kicks, %u draws, %u tiles, %u blocking waits in the last beat\n",
 			       (unsigned)(kicks - prev_kicks), (unsigned)(draws - prev_draws),
 			       (unsigned)(tiles - prev_tiles), (unsigned)(waits - prev_waits));
+			printk("[hb] gpu: %u driver quads, %u frame splits in the last beat\n",
+			       (unsigned)(quads - prev_quads), (unsigned)(splits - prev_splits));
+			prev_quads = quads;
+			prev_splits = splits;
 			prev_kicks = kicks;
 			prev_waits = waits;
 			prev_draws = draws;
@@ -112,12 +120,26 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 			int64_t up = k_uptime_get();
 
 			pvr_render_perf_read(perf);
-			if (prev_timer_up && up > prev_timer_up)
+			if (prev_timer_up && up > prev_timer_up) {
+				uint64_t clk = (uint64_t)(perf[6] - prev_timer) * 256u;
+
 				printk("[hb] gpu core clock %u MHz (timer %u ticks in %u ms)\n",
-				       (unsigned)(((uint64_t)(perf[6] - prev_timer) * 256u) /
-						  (uint64_t)((up - prev_timer_up) * 1000)),
+				       (unsigned)(clk / (uint64_t)((up - prev_timer_up) * 1000)),
 				       (unsigned)(perf[6] - prev_timer),
 				       (unsigned)(up - prev_timer_up));
+				/* Where the beat went: the geometry phase, the
+				 * fragment phase, and how much of each was the SLC
+				 * making the core wait (PERF_TA_CYCLE /
+				 * PERF_3D_CYCLE / PERF_SLC0_*_STALL). */
+				if (clk)
+					printk("[hb] gpu cycles: ta %u%%, 3d %u%%, slc read stall %u%%, write stall %u%%\n",
+					       (unsigned)((uint64_t)(perf[0] - prev_perf[0]) * 100u / clk),
+					       (unsigned)((uint64_t)(perf[1] - prev_perf[1]) * 100u / clk),
+					       (unsigned)((uint64_t)(perf[3] - prev_perf[3]) * 100u / clk),
+					       (unsigned)((uint64_t)(perf[4] - prev_perf[4]) * 100u / clk));
+			}
+			for (int i = 0; i < 6; i++)
+				prev_perf[i] = perf[i];
 			prev_timer = perf[6];
 			prev_timer_up = up;
 		}
