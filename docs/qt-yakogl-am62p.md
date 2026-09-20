@@ -106,6 +106,27 @@ output the same way).
 stage, blend variant and compiler binary: a regeneration after adding a few
 shaders then takes seconds instead of the half hour the whole table costs.
 
+### What a frame costs
+
+Measured on 2026-09-20 with `intro` at 1024x600: a Qt Quick 3D frame is **two
+kicks** -- the View3D's RGBA16F offscreen (skybox + model) and Qt Quick
+compositing that texture into the window -- and each kick's GPU time is
+**7-8 ms**. The frame rate was nevertheless about 8 fps until two stalls that
+have nothing to do with the GPU were removed:
+
+- the driver's **pre-kick MMU cache invalidate** waited up to 100 ms for the
+  firmware's ack, which does not arrive inside that window while the firmware
+  is busy with the kicks already queued. The firmware runs its command queue in
+  order, so the command only has to be posted, and only when a mapping changed
+  (`pvr_mmu_take_dirty`). intro went from 8.5 to **34 fps**;
+- **console logging**: `CONFIG_LOG_MODE_MINIMAL` writes synchronously at 115200
+  baud, and Qt probes thousands of missing filesystem paths, each of which the
+  filesystem subsystem logged (`CONFIG_FS_LOG_LEVEL_OFF=y`).
+
+The heartbeat reports what remains: the GPU core clock it measured (800 MHz),
+the kicks, draws, tiles and blocking waits of the last beat, the driver's own
+full-screen quads and frame splits, and the GPU busy share.
+
 ### OpenGL ES 3.0 (Qt Quick 3D)
 
 Since 2026-09-17 YakoGL reports `OpenGL ES 3.0` (an EGL client version 2 or 3
