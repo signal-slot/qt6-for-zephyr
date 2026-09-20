@@ -151,8 +151,59 @@ extern "C" void qzephyr_display_write(int x, int y, int w, int h,
 
 // ---- OpenGL ES swap-chain hooks (CONFIG_QT_OPENGL) -------------------------
 
+// QZEPHYR_GL_OPT="name=value,name=value" (CONFIG_QT_ENV): backend knobs a board
+// run can turn without a rebuild. The firmware has no shell and every A/B on
+// this hardware otherwise costs a full Stage 2 build, so the few options worth
+// bisecting are reachable by name.
+//   force_mip0=1     sample every texture from level 0
+//   prim_budget=N    primitives one kick may tile before the frame is split
+//   no_coalesce=1    one DMA stream per attribute
+//   depth_clip=0|1   clip against near/far, or clamp
+static void gl_options_from_env(void)
+{
+#ifdef CONFIG_QT_DEBUG_LOG
+    static bool done;
+    const char *e;
+
+    if (done)
+        return;
+    done = true;
+    e = getenv("QZEPHYR_GL_OPT");
+    if (!e || !*e)
+        return;
+    static const struct { const char *name; enum pvr_backend_option opt; } known[] = {
+        { "force_mip0",   PVR_BACKEND_OPT_FORCE_MIP0 },
+        { "prim_budget",  PVR_BACKEND_OPT_PRIM_BUDGET },
+        { "no_coalesce",  PVR_BACKEND_OPT_NO_COALESCE },
+        { "depth_clip",   PVR_BACKEND_OPT_DEPTH_CLIP },
+    };
+    for (const char *p = e; *p; ) {
+        const char *eq = strchr(p, '=');
+        const char *end = strchr(p, ',');
+
+        if (!end)
+            end = p + strlen(p);
+        if (eq && eq < end) {
+            for (const auto &k : known) {
+                size_t n = strlen(k.name);
+
+                if ((size_t)(eq - p) == n && strncmp(p, k.name, n) == 0) {
+                    uint32_t v = (uint32_t)strtoul(eq + 1, nullptr, 0);
+
+                    printk("qzephyr: backend option %s = %u\n", k.name, v);
+                    pvr_backend_set_option(k.opt, v);
+                    break;
+                }
+            }
+        }
+        p = *end ? end + 1 : end;
+    }
+#endif
+}
+
 extern "C" int qzephyr_gl_buffer_count(void)
 {
+    gl_options_from_env();
     return FB_COUNT;
 }
 
