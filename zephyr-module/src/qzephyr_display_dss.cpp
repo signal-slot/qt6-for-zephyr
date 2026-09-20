@@ -233,19 +233,32 @@ static void dump_crop(int index, int tag)
 
 // A UI that stops presenting (a static Quick 3D scene renders once and idles)
 // never reaches the later dump points: 3 s without a present dumps the frame
-// on screen once, as tag 0. A low-priority thread of its own watches for that
+// on screen, as tag 0. A low-priority thread of its own watches for that
 // (the system work queue's stack is too small for the printing).
+//
+// Every idle period dumps again, because the first one is rarely the picture
+// worth keeping: a scene whose models are incubated asynchronously (Quick 3D's
+// Component.incubateObject) idles for longer than three seconds while it is
+// still half built, and a dump that happened once and latched left the harness
+// judging an unfinished frame (cascadedshadowmaps, 2026-09-20). Re-dumping
+// costs a couple of seconds of console per idle period and the decoder keeps
+// the last one (fbdump2png.py fills the same tag row by row).
 static int s_idle_index = -1;
 static bool s_idle_dumped;
 static int64_t s_last_present_ms;
+static int64_t s_last_idle_dump_ms;
 static void idle_watch(void *, void *, void *)
 {
     for (;;) {
         k_msleep(500);
+        int64_t now = k_uptime_get();
+
         if (s_idle_dumped || s_idle_index < 0 || s_dumping ||
-            k_uptime_get() - s_last_present_ms < 3000)
+            now - s_last_present_ms < 3000 ||
+            (s_last_idle_dump_ms && now - s_last_idle_dump_ms < 10000))
             continue;
         s_idle_dumped = true;
+        s_last_idle_dump_ms = now;
         printk("fbidle: no present for 3 s, dumping buffer %d\n", s_idle_index);
         dump_thumbnail(s_idle_index, 0);
         dump_crop(s_idle_index, 0);
@@ -266,6 +279,7 @@ static void sample_frame(int index)
     ++presents;
     s_idle_index = index;
     s_last_present_ms = k_uptime_get();
+    s_idle_dumped = false;   /* the picture changed: the next idle dumps it again */
     if (presents > 600 || presents % 30 != 1 || s_dumping)
         return;
     for (const auto &p : pts) {
