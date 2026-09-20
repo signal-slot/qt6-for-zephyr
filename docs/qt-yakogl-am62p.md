@@ -150,6 +150,23 @@ What the core provides on top of ES 2.0, and how:
   clear shader: the background object leaves its pixels untouched on
   silicon. `glReadPixels` reads float targets as clamped RGBA8 or as
   RGBA/FLOAT.
+- Several colour attachments in one render (a G-buffer pass): the fragment
+  shader's outputs go to the pixel output registers, of which this core has
+  **four** -- so two RGBA16F attachments fit and a third does not. The
+  compiler puts the outputs that do not fit in **tile buffers** (memory the
+  shader stores to, addressed from shared registers), and the end-of-tile
+  program loads each one back into the output registers before emitting its
+  attachment. `userpasses` renders its three RGBA16F G-buffers that way.
+- One descriptor per sampler the shader declares. The compiler packs a
+  20-dword combined image+sampler descriptor per used sampler at sh0.. and
+  puts the uniform block after them; Quick 3D material shaders declare a
+  dozen and more, and a short descriptor block leaves the shader reading
+  image state out of its own uniforms -- a texture fetch from a nonsense
+  address, which faults the GPU. `GL_MAX_TEXTURE_IMAGE_UNITS` is 16.
+- The uniform DMA carries only the prefix the compiled shader reads (the
+  application still writes the whole block, so every write lands at its
+  std430 offset): a material writes a hundred dwords and reads a dozen, and
+  shared registers are what limits how many tasks the USC runs at once.
 - The GL scissor is pixel exact: each scissored object names an entry of the
   kick's ISP scissor table (`ISPCTL.scenable`, `CR_ISP_SCISSOR_BASE`) besides
   the tile-granular region clip.
