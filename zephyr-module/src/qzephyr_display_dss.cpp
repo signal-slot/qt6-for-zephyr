@@ -427,7 +427,19 @@ extern "C" void qzephyr_gl_debug_set(int on)
      * that takes seconds to arrive is still dumped; the timer is the upper
      * bound for a scene that keeps drawing. */
     if (on)
-        k_timer_start(&s_debug_timer, K_SECONDS(30), K_NO_WAIT);
+        /* The dump itself makes a frame take a minute at 115200 baud, and a
+         * Quick 3D scene with an image-based light spends its first forty
+         * kicks building the cube map, so thirty seconds ended the dump
+         * before the scene's own draws (the skybox, the materials) ever
+         * ran. QZEPHYR_GL_DUMP_SECONDS overrides it. */
+        {
+            const char *e = getenv("QZEPHYR_GL_DUMP_SECONDS");
+            int secs = e ? atoi(e) : 300;
+
+            if (secs <= 0)
+                secs = 300;
+            k_timer_start(&s_debug_timer, K_SECONDS(secs), K_NO_WAIT);
+        }
     else
         k_timer_stop(&s_debug_timer);
 #else
