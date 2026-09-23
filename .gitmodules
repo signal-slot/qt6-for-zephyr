@@ -1,7 +1,7 @@
 [submodule "qtbase"]
 	path = qtbase
 	url = ../qtbase-for-zephyr.git
-	branch = 6.11.0
+	branch = zephyr
 	status = essential
 [submodule "qtsvg"]
 	depends = qtbase
@@ -264,14 +264,14 @@
 	depends = qtbase qtdeclarative qtshadertools
 	recommends = qtquicktimeline
 	path = qtquick3d
-	url = git://code.qt.io/qt/qtquick3d.git
-	branch = 6.11.0
+	url = ../qtquick3d-for-zephyr.git
+	branch = zephyr
 	status = addon
 [submodule "qtshadertools"]
 	depends = qtbase
 	path = qtshadertools
 	url = ../qtshadertools-for-zephyr.git
-	branch = 6.11.0
+	branch = zephyr
 	status = addon
 [submodule "qt5compat"]
 	depends = qtbase qtdeclarative
