@@ -52,15 +52,19 @@ target_sources(app PRIVATE
 # Zephyr app build (QT_DEFER_ZEPHYR_RUNTIME=ON) and the `app` target's AUTOMOC
 # is disabled there ("no valid Qt version"), so generate it here.
 #
-# It has to be compiled as a translation unit of its own.  The upstream idiom
-# is for the .cpp to end with #include "moc_..._p.cpp", and putting the moc on
-# the include path would then be enough -- but this fork's
-# qeventdispatcher_zephyr.cpp does not have that line.  Without the moc in the
-# build the vtable is undefined, and because Stage 1 propagates
+# The upstream idiom is for the .cpp to end with #include "moc_..._p.cpp",
+# with the moc on the include path.  qtbase-for-zephyr's
+# qeventdispatcher_zephyr.cpp has that line since 117ef730 ("emit
+# QEventDispatcherZephyr vtable via moc include"); before it the moc had to be
+# a translation unit of its own (6b30e797 here).  Both fixes met when qtbase's
+# 6.11.0 line was merged with its zephyr branch, and compiling the moc twice is
+# a link error (multiple definition of QEventDispatcherZephyr::metaObject and
+# friends).  So the moc is always generated and put on the include path, and
+# compiled on its own only when the .cpp does not include it.  Without the moc
+# in the build at all the vtable is undefined, and because Stage 1 propagates
 # -Wl,--unresolved-symbols=ignore-all the link still succeeds: the firmware
 # faults on the first virtual call instead (wakeUp() from
-# QCoreApplication::postEvent).  The include path stays for the moc's own
-# #include of the header.
+# QCoreApplication::postEvent).
 find_program(QZ_MOC NAMES moc
     HINTS "${QT_HOST_PATH}/libexec" "${QT_HOST_PATH}/bin"
           "$ENV{QT_HOST_PATH}/libexec" "$ENV{QT_HOST_PATH}/bin"
@@ -83,7 +87,11 @@ if(NOT _qz_moc_rc EQUAL 0)
         "${_qz_disp_hdr}")
 endif()
 target_include_directories(app PRIVATE "${_qz_moc_dir}")
-target_sources(app PRIVATE "${_qz_moc_dir}/moc_qeventdispatcher_zephyr_p.cpp")
+file(STRINGS "${QT_QTBASE_SOURCE}/src/corelib/kernel/qeventdispatcher_zephyr.cpp"
+     _qz_moc_included REGEX "^#include \"moc_qeventdispatcher_zephyr_p\\.cpp\"")
+if(NOT _qz_moc_included)
+    target_sources(app PRIVATE "${_qz_moc_dir}/moc_qeventdispatcher_zephyr_p.cpp")
+endif()
 
 # Idle keep-alive thread (src/qzephyr_keepalive.c): prevents the silent
 # idle/SysTick clock-gating hang seen on long GUI soaks (collidingmice).
