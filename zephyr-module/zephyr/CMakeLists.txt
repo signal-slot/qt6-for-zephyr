@@ -144,6 +144,13 @@ if(CONFIG_QT_GUI)
             # the backend's debug option lives in a private YakoGL header
             target_include_directories(app PRIVATE "${ZEPHYR_YAKOGL_MODULE_DIR}/src/pvr")
         endif()
+    elseif(CONFIG_QT_DISPLAY_IMX8MP)
+        # imx8mp_display.h comes from the GPU driver's Zephyr module, which
+        # puts driver/src/display on the include path when it builds the
+        # display library.
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_display_imx8mp.cpp"
+        )
     endif()
 endif()
 
@@ -158,10 +165,10 @@ if(CONFIG_QT_OPENGL)
             "OpenGL ES support (no yakogl-sdk/ under the prefix): run "
             "build-qt-zephyr-am62p.sh, or point QT_ZEPHYR_PREFIX at its install.")
     endif()
-    if(NOT CONFIG_QT_DISPLAY_AM62P_DSS)
+    if(NOT CONFIG_QT_DISPLAY_AM62P_DSS AND NOT CONFIG_QT_DISPLAY_IMX8MP)
         message(FATAL_ERROR
             "CONFIG_QT_OPENGL=y needs a display glue that provides scan-out "
-            "buffers (CONFIG_QT_DISPLAY_AM62P_DSS).")
+            "buffers (CONFIG_QT_DISPLAY_AM62P_DSS or CONFIG_QT_DISPLAY_IMX8MP).")
     endif()
 endif()
 

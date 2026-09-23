@@ -154,6 +154,7 @@ config QT_OPENGL
 choice QT_DISPLAY_GLUE
 	prompt "Display glue for the qzephyr QPA"
 	default QT_DISPLAY_AM62P_DSS if SAFEUI_DSS_AM62P
+	default QT_DISPLAY_IMX8MP if SAFEUI_DISPLAY_IMX8MP
 	default QT_DISPLAY_ZEPHYR_API
 	depends on QT_GUI
 
@@ -175,7 +176,32 @@ config QT_DISPLAY_AM62P_DSS
 	  into a buffer; OpenGL frames (QT_OPENGL) are rendered straight
 	  into them by the GPU.
 
+config QT_DISPLAY_IMX8MP
+	bool "i.MX8M Plus LCDIF through the GPU driver's imx8mp_display"
+	depends on SAFEUI_DISPLAY_IMX8MP
+	help
+	  The Verdin iMX8M Plus (LCDIF -> MIPI DSIM -> SN65DSI84, brought up
+	  from cold or adopted) and the Armadillo-X2 (LCDIF3 -> HDMI,
+	  adopted), through the YakoGL driver repository's imx8mp_display:
+	  Qt owns QT_SCANOUT_BUFFERS XRGB8888 buffers of QT_IMX8MP_WIDTH x
+	  QT_IMX8MP_HEIGHT in the image and flips the LCDIF to the one
+	  holding the latest frame, each flip waiting for the LCDIF to latch
+	  it. The A53 drives the panel directly; the SafeUI M7 is not used.
+
 endchoice
+
+config QT_IMX8MP_WIDTH
+	int "Panel width in pixels"
+	default 1280
+	depends on QT_DISPLAY_IMX8MP
+	help
+	  Must match the display node's hactive; the glue refuses a
+	  mismatch rather than scan frames at the wrong pitch.
+
+config QT_IMX8MP_HEIGHT
+	int "Panel height in pixels"
+	default 800
+	depends on QT_DISPLAY_IMX8MP
 
 config QT_DSS_WIDTH
 	int "Panel width in pixels"
@@ -191,7 +217,7 @@ config QT_SCANOUT_BUFFERS
 	int "Scan-out buffers (1: single, 2: double, 3: triple buffering)"
 	default 3
 	range 1 3
-	depends on QT_DISPLAY_AM62P_DSS
+	depends on QT_DISPLAY_AM62P_DSS || QT_DISPLAY_IMX8MP
 	help
 	  Three lets the display scan one buffer while the GPU renders the
 	  next and the CPU records the third (the GPU driver samples run at
