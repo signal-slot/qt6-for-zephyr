@@ -154,5 +154,12 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
 	}
 }
 
-K_THREAD_DEFINE(qz_keepalive_tid, 1024, qzephyr_idle_keepalive, NULL, NULL, NULL,
+/* 4096, not 1024: on rpi_4b (AArch64, Cortex-A72) the firmware stopped
+ * silently after the first beat with a 1 KiB stack (the 4-core and the 1-core
+ * build alike; a plain 1 s ticker without Qt ran on).  A diagnostic build
+ * (CONFIG_STACK_SENTINEL plus the thread analyzer) reported a stack overflow
+ * in this thread.  With 4096 the board ran for 30 minutes
+ * (to heartbeat #181, then the power was cut).  The real usage was
+ * not measured, so 4096 is a round value, not a tight one. */
+K_THREAD_DEFINE(qz_keepalive_tid, 4096, qzephyr_idle_keepalive, NULL, NULL, NULL,
 		-1 /* cooperative */, 0, 0);
