@@ -257,7 +257,7 @@
 [submodule "qtquicktimeline"]
 	depends = qtbase qtdeclarative
 	path = qtquicktimeline
-	url = ../qtquicktimeline
+	url = git://code.qt.io/qt/qtquicktimeline.git
 	branch = 6.11.0
 	status = addon
 [submodule "qtquick3d"]
