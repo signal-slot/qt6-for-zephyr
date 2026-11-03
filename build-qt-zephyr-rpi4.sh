@@ -5,9 +5,18 @@
 # Derived from build-qt-zephyr-am62p.sh (the AArch64 Stage 1; board
 # independent).  Differences:
 #   - -mcpu=cortex-a72 (what Zephyr uses for rpi_4b);
-#   - no OpenGL / EGL: this repository has no GPU driver for the Raspberry Pi 4,
-#     so Qt draws with the CPU (QPainter, Qt Quick software scene graph), as in
-#     build-qt-zephyr-rt1170.sh.  YakoGL is not needed.
+#   - by default no OpenGL / EGL: Qt draws with the CPU (QPainter, Qt Quick
+#     software scene graph), as in build-qt-zephyr-rt1170.sh.
+#   - WITH_GL=1: OpenGL ES 2.0 + EGL for the board's V3D GPU through YakoGL
+#     (github.com/signal-slot/yakogl; YAKOGL_DIR, default ~/org/yakogl).  As in
+#     build-qt-zephyr-am62p.sh, Qt is built against YakoGL's headers and two
+#     empty stand-in archives; the real GL/EGL symbols come from YakoGL's
+#     Zephyr module in Stage 2 (zephyr-module/qt-app/boards/
+#     rpi_4b_bcm2711_gl.conf).  The default PREFIX and BUILD_DIR get a "-gl"
+#     suffix, so the two builds do not mix.  The GL build also needs the
+#     qtbase change that gives QZephyrScreen a 32-bit depth for
+#     Format_RGBX8888 (without it the screen reports 16 bit and the EGL
+#     window surface is refused).
 # Stage 2 must select CONFIG_PICOLIBC=y (the SDK ships no newlib for AArch64).
 # The caveats at the top of build-qt-zephyr-am62p.sh (architecture_test, the
 # Zephyr event dispatcher) apply here too.
@@ -18,9 +27,17 @@
 
 set -e
 
-PREFIX="${PREFIX:-${HOME}/qt-zephyr-rpi4}"
+WITH_GL="${WITH_GL:-0}"
+case "$WITH_GL" in
+    0|1) ;;
+    *) echo "Error: WITH_GL must be 0 or 1 (got '$WITH_GL')" >&2; exit 1 ;;
+esac
+GL_SUFFIX=""
+[ "$WITH_GL" = "1" ] && GL_SUFFIX="-gl"
+PREFIX="${PREFIX:-${HOME}/qt-zephyr-rpi4${GL_SUFFIX}}"
 QT_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="${BUILD_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/build-qt-zephyr-rpi4}"
+BUILD_DIR="${BUILD_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/build-qt-zephyr-rpi4${GL_SUFFIX}}"
+YAKOGL_DIR="${YAKOGL_DIR:-${HOME}/org/yakogl}"
 ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-${HOME}/org/zephyrproject/zephyr-sdk-1.0.1}"
 ZEPHYR_BASE="${ZEPHYR_BASE:-${HOME}/org/zephyrproject/zephyrproject/zephyr}"
 QT_HOST_PATH="${QT_HOST_PATH:-${HOME}/qt-x11-sim}"
@@ -45,13 +62,65 @@ fi
 
 mkdir -p "$BUILD_DIR"
 
-info "Configuring Qt6 cross-build for Raspberry Pi 4 (Cortex-A72), no GL..."
+GL_OPTS=(
+    # No GPU: raster path only (same settings as build-qt-zephyr-rt1170.sh).
+    -DFEATURE_opengl=OFF
+    -DFEATURE_opengles2=OFF
+    -DFEATURE_opengles3=OFF
+    -DFEATURE_egl=OFF
+    # INPUT_opengl=no disables OpenGL auto-detection (no desktop/dynamic GL
+    # probing).
+    -DINPUT_opengl=no
+)
+if [ "$WITH_GL" = "1" ]; then
+    [ -f "$YAKOGL_DIR/include/GLES2/gl2.h" ] && [ -f "$YAKOGL_DIR/include/EGL/egl.h" ] \
+        || error "YAKOGL_DIR ($YAKOGL_DIR) has no include/GLES2/gl2.h + include/EGL/egl.h"
+    # The GL "SDK" Qt's FindGLESv2 / FindEGL modules see: YakoGL's Khronos
+    # headers and two empty archives named libGLESv2.a / libEGL.a (Qt only
+    # needs the files to exist; every gl*/egl* symbol is provided in Stage 2
+    # by YakoGL's Zephyr module).  Installed under the prefix so Qt6's
+    # exported EGL::EGL / GLESv2::GLESv2 targets keep resolving from any
+    # Stage 2 build tree.
+    GL_SDK="$PREFIX/yakogl-sdk"
+    mkdir -p "$GL_SDK/lib" "$GL_SDK/include"
+    cp -r "$YAKOGL_DIR/include/." "$GL_SDK/include/"
+    : > "$BUILD_DIR/yakogl_stub.c"
+    "$TOOLCHAIN_ROOT/bin/aarch64-zephyr-elf-gcc" -c "$BUILD_DIR/yakogl_stub.c" -o "$BUILD_DIR/yakogl_stub.o"
+    for lib in GLESv2 EGL; do
+        rm -f "$GL_SDK/lib/lib$lib.a"
+        "$TOOLCHAIN_ROOT/bin/aarch64-zephyr-elf-ar" rcs "$GL_SDK/lib/lib$lib.a" "$BUILD_DIR/yakogl_stub.o"
+    done
+    GL_OPTS=(
+        # OpenGL ES 2.0 + EGL: Qt's GLES2 RHI backend (Qt Quick's default
+        # scene graph renderer) and the qzephyr QPA's EGL platform context.
+        -DFEATURE_opengl=ON
+        -DFEATURE_opengles2=ON
+        -DFEATURE_opengles3=OFF
+        -DFEATURE_egl=ON
+        -DGLESv2_INCLUDE_DIR="$GL_SDK/include"
+        -DGLESv2_LIBRARY="$GL_SDK/lib/libGLESv2.a"
+        -DEGL_INCLUDE_DIR="$GL_SDK/include"
+        -DEGL_LIBRARY="$GL_SDK/lib/libEGL.a"
+        # INPUT_opengl=es2 pins the OpenGL flavour (no desktop/dynamic GL
+        # probing against the stand-in library).
+        -DINPUT_opengl=es2
+    )
+fi
+
+info "Configuring Qt6 cross-build for Raspberry Pi 4 (Cortex-A72), WITH_GL=$WITH_GL..."
 info "  source:      $QT_SOURCE_DIR"
 info "  build:       $BUILD_DIR"
 info "  prefix:      $PREFIX"
 info "  Zephyr SDK:  $ZEPHYR_SDK_INSTALL_DIR"
 info "  ZEPHYR_BASE: $ZEPHYR_BASE"
 info "  QT_HOST_PATH:$QT_HOST_PATH"
+if [ "$WITH_GL" = "1" ]; then
+    info "  YAKOGL_DIR:  $YAKOGL_DIR"
+elif [ -e "$PREFIX/yakogl-sdk/lib/libEGL.a" ]; then
+    # A GL install left here: Stage 2's OpenGL check looks for that file, and
+    # would pass against a prefix that has no GL-enabled Qt libraries.
+    info "WARNING: $PREFIX has yakogl-sdk/ from a WITH_GL=1 run; use another PREFIX or remove it"
+fi
 
 cat > "$BUILD_DIR/zephyr-rpi4-toolchain.cmake" <<EOF
 # CMake toolchain file for Qt6 cross-build targeting the
@@ -228,11 +297,8 @@ CMAKE_OPTS=(
     -DFEATURE_tiff=OFF
     -DFEATURE_library=OFF
     -DFEATURE_network=OFF
-    # No GPU: raster path only (same settings as build-qt-zephyr-rt1170.sh).
-    -DFEATURE_opengl=OFF
-    -DFEATURE_opengles2=OFF
-    -DFEATURE_opengles3=OFF
-    -DFEATURE_egl=OFF
+    # OpenGL / EGL: GL_OPTS above (off, or YakoGL's headers with WITH_GL=1).
+    "${GL_OPTS[@]}"
     # (Matters only if EGL is turned on.)  With EGL found Qt auto-enables its Unix EGL platform plugins (eglfs,
     # minimalegl), which need the generic Unix font database / event
     # dispatcher Qt does not build on Zephyr.  The qzephyr plugin is the
@@ -253,9 +319,6 @@ CMAKE_OPTS=(
     # FEATURE_network=OFF for us), so cut it from QML too.  Apps that
     # ship their own qrc:/ resources do not need the network path.
     -DFEATURE_qml_network=OFF
-    # INPUT_opengl=no disables OpenGL auto-detection (no desktop/dynamic GL
-    # probing).
-    -DINPUT_opengl=no
     -DFEATURE_openssl=OFF
     -DFEATURE_pch=OFF
     -DFEATURE_pkg_config=OFF
