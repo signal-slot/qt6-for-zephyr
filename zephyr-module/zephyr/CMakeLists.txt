@@ -144,6 +144,23 @@ if(CONFIG_QT_GUI)
             # the backend's debug option lives in a private YakoGL header
             target_include_directories(app PRIVATE "${ZEPHYR_YAKOGL_MODULE_DIR}/src/pvr")
         endif()
+    elseif(CONFIG_QT_DISPLAY_RPI4_V3D)
+        # The property mailbox code of YakoGL's Pi 4 board layer (not the
+        # board layer: it carries a watchdog that resets the board).
+        if(NOT DEFINED ZEPHYR_YAKOGL_MODULE_DIR)
+            message(FATAL_ERROR
+                "CONFIG_QT_DISPLAY_RPI4_V3D=y needs YakoGL on ZEPHYR_EXTRA_MODULES "
+                "(it supplies rpi_mbox.c and the V3D).")
+        endif()
+        set(_qz_rpi4_board "${ZEPHYR_YAKOGL_MODULE_DIR}/driver/zephyr/lib/board/rpi4")
+        target_sources(app PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/../src/qzephyr_display_rpi4_v3d.cpp"
+            "${_qz_rpi4_board}/rpi_mbox.c"
+        )
+        target_include_directories(app PRIVATE
+            "${_qz_rpi4_board}"
+            "${ZEPHYR_YAKOGL_MODULE_DIR}/src/osal"
+        )
     elseif(CONFIG_QT_DISPLAY_IMX8MP)
         # imx8mp_display.h comes from the GPU driver's Zephyr module, which
         # puts driver/src/display on the include path when it builds the
@@ -163,12 +180,15 @@ if(CONFIG_QT_OPENGL)
         message(FATAL_ERROR
             "CONFIG_QT_OPENGL=y but ${QT_ZEPHYR_PREFIX} was not built with "
             "OpenGL ES support (no yakogl-sdk/ under the prefix): run "
-            "build-qt-zephyr-am62p.sh, or point QT_ZEPHYR_PREFIX at its install.")
+            "build-qt-zephyr-am62p.sh, or build-qt-zephyr-rpi4.sh with "
+            "WITH_GL=1, or point QT_ZEPHYR_PREFIX at its install.")
     endif()
-    if(NOT CONFIG_QT_DISPLAY_AM62P_DSS AND NOT CONFIG_QT_DISPLAY_IMX8MP)
+    if(NOT CONFIG_QT_DISPLAY_AM62P_DSS AND NOT CONFIG_QT_DISPLAY_IMX8MP
+       AND NOT CONFIG_QT_DISPLAY_RPI4_V3D)
         message(FATAL_ERROR
             "CONFIG_QT_OPENGL=y needs a display glue that provides scan-out "
-            "buffers (CONFIG_QT_DISPLAY_AM62P_DSS or CONFIG_QT_DISPLAY_IMX8MP).")
+            "buffers (CONFIG_QT_DISPLAY_AM62P_DSS, CONFIG_QT_DISPLAY_IMX8MP "
+            "or CONFIG_QT_DISPLAY_RPI4_V3D).")
     endif()
 endif()
 

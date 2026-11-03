@@ -141,10 +141,13 @@ config QT_OPENGL
 	help
 	  Render QtQuick (Qt's GLES2 RHI backend) and any QOpenGLContext user
 	  on the GPU through YakoGL, the OS-less OpenGL ES 2.0 + EGL library
-	  (github.com/signal-slot/yakogl; PowerVR BXS-4-64 on the TI AM62P).
-	  Needs a Stage 1 install built by build-qt-zephyr-am62p.sh (Qt with
-	  FEATURE_opengles2 + FEATURE_egl against YakoGL's headers) and a
-	  display glue that owns scan-out buffers (QT_DISPLAY_AM62P_DSS).
+	  (github.com/signal-slot/yakogl; PowerVR BXS-4-64 on the TI AM62P,
+	  V3D on the Raspberry Pi 4).
+	  Needs a Stage 1 install built by build-qt-zephyr-am62p.sh, or by
+	  build-qt-zephyr-rpi4.sh with WITH_GL=1 (Qt with FEATURE_opengles2 +
+	  FEATURE_egl against YakoGL's headers), and a display glue that owns
+	  scan-out buffers (QT_DISPLAY_AM62P_DSS, QT_DISPLAY_IMX8MP or
+	  QT_DISPLAY_RPI4_V3D).
 	  The qzephyr QPA renders each frame into one of
 	  QT_SCANOUT_BUFFERS scan-out buffers and flips the display plane
 	  to it; the QPainter raster path (QtWidgets) keeps working next
@@ -188,6 +191,28 @@ config QT_DISPLAY_IMX8MP
 	  holding the latest frame, each flip waiting for the LCDIF to latch
 	  it. The A53 drives the panel directly; the SafeUI M7 is not used.
 
+config QT_DISPLAY_RPI4_V3D
+	bool "Raspberry Pi 4: the firmware framebuffer, flipped by pan (with YakoGL's V3D)"
+	depends on SOC_BCM2711
+	depends on YAKOGL
+	depends on !YAKOGL_BOARD
+	help
+	  The Raspberry Pi 4 (rpi_4b) with the firmware framebuffer asked for
+	  through the property mailbox code of YakoGL's Pi 4 board layer
+	  (driver/zephyr/lib/board/rpi4/rpi_mbox.c, compiled into the app; the
+	  board layer itself, with its watchdog, is not used).  Qt asks for a
+	  framebuffer QT_RPI4_WIDTH x (QT_RPI4_HEIGHT x QT_SCANOUT_BUFFERS)
+	  rows, the buffers being its parts; a flip is a pan to a part's first
+	  row.  OpenGL frames (QT_OPENGL) are rendered straight into it by
+	  the V3D.  QPainter frames are copied into a part and flipped at
+	  once, without waiting for a vsync; that path was not run on the
+	  board (only OpenGL was).  Zephyr's own rpi_fw / mailbox driver must
+	  be off (YakoGL polls the mailbox itself):
+	  boards/rpi_4b_bcm2711_gl.overlay does that.  YakoGL's own board
+	  layer (CONFIG_YAKOGL_BOARD) must be off: it carries the same mailbox
+	  code and a watchdog feeder with a time limit.  The glue does not
+	  raise the V3D clock to its maximum as that board layer does.
+
 endchoice
 
 config QT_IMX8MP_WIDTH
@@ -213,11 +238,25 @@ config QT_DSS_HEIGHT
 	default 600
 	depends on QT_DISPLAY_AM62P_DSS
 
+config QT_RPI4_WIDTH
+	int "Framebuffer width in pixels"
+	default 800
+	help
+	  Keep equal to fb0's width in boards/rpi_4b_bcm2711.overlay.
+	depends on QT_DISPLAY_RPI4_V3D
+
+config QT_RPI4_HEIGHT
+	int "Framebuffer height in pixels (one screen)"
+	default 480
+	help
+	  Keep equal to fb0's height in boards/rpi_4b_bcm2711.overlay.
+	depends on QT_DISPLAY_RPI4_V3D
+
 config QT_SCANOUT_BUFFERS
 	int "Scan-out buffers (1: single, 2: double, 3: triple buffering)"
 	default 3
 	range 1 3
-	depends on QT_DISPLAY_AM62P_DSS || QT_DISPLAY_IMX8MP
+	depends on QT_DISPLAY_AM62P_DSS || QT_DISPLAY_IMX8MP || QT_DISPLAY_RPI4_V3D
 	help
 	  Three lets the display scan one buffer while the GPU renders the
 	  next and the CPU records the third (the GPU driver samples run at
