@@ -62,6 +62,7 @@ fi
 
 mkdir -p "$BUILD_DIR"
 
+GL_TOOLCHAIN_INC=""
 GL_OPTS=(
     # No GPU: raster path only (same settings as build-qt-zephyr-rt1170.sh).
     -DFEATURE_opengl=OFF
@@ -82,6 +83,12 @@ if [ "$WITH_GL" = "1" ]; then
     # exported EGL::EGL / GLESv2::GLESv2 targets keep resolving from any
     # Stage 2 build tree.
     GL_SDK="$PREFIX/yakogl-sdk"
+    # Qt 6.12: the precompiled header of the QuickLayouts plugin includes
+    # <QtGui/QtGui> and with it qopengl.h (GLES2/gl2.h), but the plugin target
+    # does not inherit the GL include directory (the compile failed with
+    # "GLES2/gl2.h: No such file or directory"), so the directory goes to
+    # every target through the toolchain file.
+    GL_TOOLCHAIN_INC="include_directories(SYSTEM \"$GL_SDK/include\")"
     mkdir -p "$GL_SDK/lib" "$GL_SDK/include"
     cp -r "$YAKOGL_DIR/include/." "$GL_SDK/include/"
     : > "$BUILD_DIR/yakogl_stub.c"
@@ -200,6 +207,7 @@ add_compile_definitions(
 # path so the shims take precedence for these specific headers without
 # affecting any other resolution.
 include_directories(BEFORE SYSTEM "$QT_SOURCE_DIR/qtbase/mkspecs/zephyr-aarch64-g++/stage1-shim")
+$GL_TOOLCHAIN_INC
 set(CMAKE_C_FLAGS_INIT   "\${CPU_FLAGS}")
 set(CMAKE_CXX_FLAGS_INIT "\${CPU_FLAGS}")
 set(CMAKE_ASM_FLAGS_INIT "\${CPU_FLAGS}")
