@@ -75,6 +75,9 @@ GL_OPTS=(
 if [ "$WITH_GL" = "1" ]; then
     [ -f "$YAKOGL_DIR/include/GLES2/gl2.h" ] && [ -f "$YAKOGL_DIR/include/EGL/egl.h" ] \
         || error "YAKOGL_DIR ($YAKOGL_DIR) has no include/GLES2/gl2.h + include/EGL/egl.h"
+    # shellcheck source=zephyr-module/tools/rpi4-pins.sh
+    . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/zephyr-module/tools/rpi4-pins.sh"
+    rpi4_check_pin YakoGL "$YAKOGL_DIR" "$RPI4_YAKOGL_COMMIT" || exit 1
     # The GL "SDK" Qt's FindGLESv2 / FindEGL modules see: YakoGL's Khronos
     # headers and two empty archives named libGLESv2.a / libEGL.a (Qt only
     # needs the files to exist; every gl*/egl* symbol is provided in Stage 2
