@@ -159,7 +159,8 @@ static void qzephyr_idle_keepalive(void *a, void *b, void *c)
  * build alike; a plain 1 s ticker without Qt ran on).  A diagnostic build
  * (CONFIG_STACK_SENTINEL plus the thread analyzer) reported a stack overflow
  * in this thread.  With 4096 the board ran for 30 minutes
- * (to heartbeat #181, then the power was cut).  The real usage was
- * not measured, so 4096 is a round value, not a tight one. */
+ * (to heartbeat #181, then the power was cut).  The peak use was measured
+ * later in a local build: 1648 of 4096 bytes over 300 s with quick-hello
+ * (see #7).  4096 is a round value, not a tight one. */
 K_THREAD_DEFINE(qz_keepalive_tid, 4096, qzephyr_idle_keepalive, NULL, NULL, NULL,
 		-1 /* cooperative */, 0, 0);
