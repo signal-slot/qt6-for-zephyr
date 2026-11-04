@@ -8,3 +8,14 @@
 &dram0 {
 	reg = <0x200000 DT_SIZE_M(512)>;
 };
+
+/*
+ * The framebuffer the firmware is asked for.  Zephyr's rpi_4b.dts says 640x480;
+ * this is the size of the official Raspberry Pi 7-inch Touch Display (DSI),
+ * which the firmware accepted (measured), and which it fills.  For an HDMI
+ * monitor set the size of that screen instead (not tried).
+ */
+&fb0 {
+	width = <800>;
+	height = <480>;
+};

@@ -8,8 +8,9 @@ import QtQuick
 
 Window {
     id: root
-    width: 1024
-    height: 600
+    // Follow the screen (the boards' screens differ).
+    width: Screen.width
+    height: Screen.height
     visible: true
     color: "#0b1018"
 
