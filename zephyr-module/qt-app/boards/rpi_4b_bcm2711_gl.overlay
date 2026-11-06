@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * Raspberry Pi 4 with the V3D (issue #9): added after rpi_4b_bcm2711.overlay.
+ *
+ * YakoGL polls the property mailbox itself (rpi_mbox.c), while Zephyr's
+ * &mbox0 and the raspberrypi firmware node have an interrupt handler that
+ * would take the same replies (YakoGL's own samples disable them for this
+ * reason; that combination was not tried on the board here).  They are off
+ * here, and with them the framebuffer node (fb0 needs the firmware node), so
+ * there is no chosen display.
+ */
+&mbox0 {
+	status = "disabled";
+};
+
+/ {
+	firmware {
+		status = "disabled";
+	};
+
+	chosen {
+		/delete-property/ zephyr,display;
+	};
+};
+
+&fb0 {
+	status = "disabled";
+};
