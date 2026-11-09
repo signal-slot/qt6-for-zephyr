@@ -142,10 +142,13 @@ add_compile_options(
     -Wno-error=implicit-int
     -Wno-error=int-conversion
 )
-# qharfbuzzng.cpp:512 assigns hb_codepoint_t* (unsigned long*) to glyph_t*
-# (unsigned int*).  Both are 32-bit on ARM-M but the C++ type checker
-# doesn't know that.  -fpermissive demotes the strict conversion error to
-# a warning -- the assignment is binary-safe at this CPU width.
+# qharfbuzzng.cpp assigns hb_codepoint_t* to glyph_t* (unsigned int*).  On
+# 32-bit ARM-M (the RT1170 script this comment comes from) uint32_t is
+# unsigned long, so the two pointer types differ although both are 32-bit, and
+# the C++ type checker rejects the conversion.  -fpermissive demotes that error
+# to a warning.  On AArch64 uint32_t is unsigned int (checked with the Zephyr
+# SDK's aarch64-zephyr-elf-gcc), so that conversion should not arise here;
+# whether -fpermissive is still needed for another reason is not known.
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fpermissive>)
 
 # Define __ZEPHYR__ so qtbase/src/corelib/global/qsystemdetection.h
@@ -227,7 +230,7 @@ CMAKE_OPTS=(
     # qtbase/src/corelib/CMakeLists.txt:1465 for the condition.
     -DQT_DEFER_ZEPHYR_RUNTIME=ON
 
-    # Tier 6 scope: Core + Gui + Widgets (QApplication + QTabWidget +
+    # Scope: Core + Gui + Widgets (QApplication + QTabWidget +
     # QPushButton + ... for the Qt-official Widgets Gallery demo).
     -DFEATURE_gui=ON
     -DFEATURE_widgets=ON
@@ -347,13 +350,16 @@ CMAKE_OPTS=(
     # NOTE: qtshadertools is intentionally NOT included here -- not
     # because it can't compile for Zephyr (the qtshadertools submodule
     # carries a patch that makes glslang's OSdependent build on
-    # Zephyr via its Unix backend), but because at runtime the
-    # Cortex-M7 firmware never invokes the qsb / shader-pipeline code:
-    # we run QtQuick's software scene-graph adaptation, which uses
-    # QPainter rather than precompiled .qsb shaders.  qtdeclarative's
-    # *build* step does need qsb to pre-compile shaders that get
+    # Zephyr via its Unix backend), but because, in the RT1170 build this
+    # comment comes from, the firmware runs QtQuick's software scene-graph
+    # adaptation (QPainter, no precompiled .qsb shaders at run time) and
+    # never invokes the qsb / shader-pipeline code.  That reason does not
+    # describe a GL build (CONFIG_QT_OPENGL=y: the GLES2 RHI with
+    # precompiled .qsb shaders; read from the board settings, not run);
+    # see #33.
+    # qtdeclarative's *build* step does need qsb to pre-compile shaders that get
     # embedded in libQt6Quick.a's QRC, but that runs on the host via
-    # QT_HOST_PATH/bin/qsb -- no need to cross-build a Cortex-M7 qsb.
+    # QT_HOST_PATH/bin/qsb -- no need to cross-build a target qsb.
     # QT_SUBMODULES (env) extends the set: Qt Quick 3D needs
     # "qtbase;qtdeclarative;qtsvg;qtshadertools;qtquicktimeline;qtquick3d"
     # (Quick 3D links QtShaderTools for its runtime material shader
