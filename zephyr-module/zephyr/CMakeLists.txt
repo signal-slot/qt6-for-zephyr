@@ -11,6 +11,12 @@
 # User-side overhead reduces to: drop the example into a workspace,
 # point west at it, run `west build`.
 
+# Drivers that do not depend on Qt (see the Kconfig after `endif # QT`).
+if(CONFIG_INPUT_RPI_FW_TOUCH)
+    zephyr_library_named(qt_zephyr_port_drivers)
+    zephyr_library_sources(${CMAKE_CURRENT_LIST_DIR}/../drivers/input/input_rpi_fw_touch.c)
+endif()
+
 if(NOT CONFIG_QT)
     return()
 endif()

@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Touch input of the official Raspberry Pi 7-inch display (800x480) on a
+  Raspberry Pi 4, read through the VideoCore firmware.
+
+  The firmware reads the panel's touch controller itself.  The driver gives it
+  a buffer with the SET_TOUCHBUF property tag and then polls the buffer (the
+  same way as Linux's drivers/input/touchscreen/raspberrypi-ts.c).  Single
+  touch only.
+
+compatible: "signal-slot,rpi-fw-touch"
+
+include: touchscreen-common.yaml
+
+properties:
+  firmware:
+    type: phandle
+    required: true
+    description: The Raspberry Pi firmware node (raspberrypi,bcm283x-firmware).
+
+  poll-interval-ms:
+    type: int
+    default: 17
+    description: |
+      Polling period of the touch buffer in milliseconds.  17 is what Linux
+      uses (about 60 Hz).
