@@ -1,40 +1,40 @@
 [submodule "qtbase"]
 	path = qtbase
 	url = ../qtbase-for-zephyr.git
-	branch = zephyr
+	branch = zephyr-qt6.12
 	status = essential
 [submodule "qtsvg"]
 	depends = qtbase
 	path = qtsvg
 	url = git://code.qt.io/qt/qtsvg.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtdeclarative"]
 	depends = qtbase
 	recommends = qtimageformats qtshadertools qtsvg qtlanguageserver
 	path = qtdeclarative
 	url = ../qtdeclarative-for-zephyr.git
-	branch = 6.11.0
+	branch = zephyr-qt6.12
 	status = essential
 [submodule "qtactiveqt"]
 	depends = qtbase
 	path = qtactiveqt
 	url = git://code.qt.io/qt/qtactiveqt.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtmultimedia"]
 	depends = qtbase qtshadertools
 	recommends = qtdeclarative qtquick3d
 	path = qtmultimedia
 	url = git://code.qt.io/qt/qtmultimedia.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qttools"]
 	depends = qtbase
 	recommends = qtdeclarative qtactiveqt
 	path = qttools
 	url = git://code.qt.io/qt/qttools.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = essential
 [submodule "qtxmlpatterns"]
 	depends = qtbase
@@ -47,7 +47,7 @@
 	depends = qttools
 	path = qttranslations
 	url = git://code.qt.io/qt/qttranslations.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = essential
 	priority = 30
 [submodule "qtdoc"]
@@ -55,7 +55,7 @@
 	recommends = qtmultimedia qtshadertools qttasktree qtwebengine
 	path = qtdoc
 	url = git://code.qt.io/qt/qtdoc.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = essential
 	priority = 40
 [submodule "qtrepotools"]
@@ -68,7 +68,7 @@
 	depends = qtbase
 	path = qtqa
 	url = git://code.qt.io/qt/qtqa.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = essential
 	priority = 50
 [submodule "qtlocation"]
@@ -76,21 +76,21 @@
 	recommends = qtdeclarative
 	path = qtlocation
 	url = git://code.qt.io/qt/qtlocation.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = preview
 [submodule "qtpositioning"]
 	depends = qtbase
 	recommends = qtdeclarative qtserialport
 	path = qtpositioning
 	url = git://code.qt.io/qt/qtpositioning.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtsensors"]
 	depends = qtbase
 	recommends = qtdeclarative
 	path = qtsensors
 	url = git://code.qt.io/qt/qtsensors.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtsystems"]
 	depends = qtbase
@@ -117,54 +117,54 @@
 	recommends = qtdeclarative
 	path = qtconnectivity
 	url = git://code.qt.io/qt/qtconnectivity.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtwayland"]
 	depends = qtbase
 	recommends = qtdeclarative
 	path = qtwayland
 	url = git://code.qt.io/qt/qtwayland.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qt3d"]
 	depends = qtbase
 	recommends = qtdeclarative qtshadertools qtmultimedia
 	path = qt3d
 	url = git://code.qt.io/qt/qt3d.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = deprecated
 [submodule "qtimageformats"]
 	depends = qtbase
 	path = qtimageformats
 	url = git://code.qt.io/qt/qtimageformats.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtserialbus"]
 	depends = qtbase
 	recommends = qtserialport
 	path = qtserialbus
 	url = git://code.qt.io/qt/qtserialbus.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtserialport"]
 	depends = qtbase
 	path = qtserialport
 	url = git://code.qt.io/qt/qtserialport.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtwebsockets"]
 	depends = qtbase
 	recommends = qtdeclarative
 	path = qtwebsockets
 	url = git://code.qt.io/qt/qtwebsockets.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtwebchannel"]
 	depends = qtbase
 	recommends = qtdeclarative qtwebsockets
 	path = qtwebchannel
 	url = git://code.qt.io/qt/qtwebchannel.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtwebengine"]
 	depends = qtdeclarative
@@ -185,28 +185,28 @@
 	recommends = qtwebengine
 	path = qtwebview
 	url = git://code.qt.io/qt/qtwebview.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtcharts"]
 	depends = qtbase
 	recommends = qtdeclarative qtmultimedia
 	path = qtcharts
 	url = git://code.qt.io/qt/qtcharts.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = deprecated
 [submodule "qtdatavis3d"]
 	depends = qtbase
 	recommends = qtdeclarative qtmultimedia
 	path = qtdatavis3d
 	url = git://code.qt.io/qt/qtdatavis3d.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = deprecated
 [submodule "qtvirtualkeyboard"]
 	depends = qtbase qtdeclarative qtsvg
 	recommends = qtmultimedia
 	path = qtvirtualkeyboard
 	url = git://code.qt.io/qt/qtvirtualkeyboard.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtgamepad"]
 	depends = qtbase
@@ -219,27 +219,27 @@
 	depends = qtbase qtdeclarative
 	path = qtscxml
 	url = git://code.qt.io/qt/qtscxml.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtspeech"]
 	depends = qtbase qtmultimedia
 	recommends = qtdeclarative
 	path = qtspeech
 	url = git://code.qt.io/qt/qtspeech.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtnetworkauth"]
 	depends = qtbase
 	path = qtnetworkauth
 	url = git://code.qt.io/qt/qtnetworkauth.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtremoteobjects"]
 	depends = qtbase
 	recommends = qtdeclarative
 	path = qtremoteobjects
 	url = git://code.qt.io/qt/qtremoteobjects.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtwebglplugin"]
 	depends = qtbase qtwebsockets
@@ -252,107 +252,107 @@
 	depends = qtbase qtdeclarative
 	path = qtlottie
 	url = git://code.qt.io/qt/qtlottie.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtquicktimeline"]
 	depends = qtbase qtdeclarative
 	path = qtquicktimeline
 	url = git://code.qt.io/qt/qtquicktimeline.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtquick3d"]
 	depends = qtbase qtdeclarative qtshadertools
 	recommends = qtquicktimeline
 	path = qtquick3d
 	url = ../qtquick3d-for-zephyr.git
-	branch = zephyr
+	branch = zephyr-qt6.12
 	status = addon
 [submodule "qtshadertools"]
 	depends = qtbase
 	path = qtshadertools
 	url = ../qtshadertools-for-zephyr.git
-	branch = zephyr
+	branch = zephyr-qt6.12
 	status = addon
 [submodule "qt5compat"]
 	depends = qtbase qtdeclarative
 	path = qt5compat
 	url = git://code.qt.io/qt/qt5compat.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = deprecated
 [submodule "qtcoap"]
 	depends = qtbase
 	path = qtcoap
 	url = git://code.qt.io/qt/qtcoap.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtmqtt"]
 	depends = qtbase qtdeclarative
 	recommends = qtwebsockets
 	path = qtmqtt
 	url = git://code.qt.io/qt/qtmqtt.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtopcua"]
 	depends = qtbase qtdeclarative
 	path = qtopcua
 	url = git://code.qt.io/qt/qtopcua.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtlanguageserver"]
 	depends = qtbase
 	path = qtlanguageserver
 	url = git://code.qt.io/qt/qtlanguageserver.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = preview
 [submodule "qthttpserver"]
 	depends = qtbase
 	recommends = qtwebsockets
 	path = qthttpserver
 	url = git://code.qt.io/qt/qthttpserver.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtquick3dphysics"]
 	depends = qtbase qtdeclarative qtquick3d qtshadertools
 	path = qtquick3dphysics
 	url = git://code.qt.io/qt/qtquick3dphysics.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtgrpc"]
 	depends = qtbase
 	recommends = qtdeclarative
 	path = qtgrpc
 	url = git://code.qt.io/qt/qtgrpc.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtquickeffectmaker"]
 	depends = qtbase qtdeclarative qtshadertools
 	recommends = qtquick3d
 	path = qtquickeffectmaker
 	url = git://code.qt.io/qt/qtquickeffectmaker.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qtgraphs"]
 	depends = qtbase qtdeclarative qtquick3d
 	path = qtgraphs
 	url = git://code.qt.io/qt/qtgraphs.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = addon
 [submodule "qttasktree"]
 	depends = qtbase
 	path = qttasktree
 	url = git://code.qt.io/qt/qttasktree.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = preview
 [submodule "qtopenapi"]
 	depends = qtbase
 	recommends = qtdeclarative
 	path = qtopenapi
 	url = git://code.qt.io/qt/qtopenapi.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = preview
 [submodule "qtcanvaspainter"]
 	depends = qtbase qtdeclarative qtshadertools
 	path = qtcanvaspainter
 	url = git://code.qt.io/qt/qtcanvaspainter.git
-	branch = 6.11.0
+	branch = 6.12.0
 	status = preview
