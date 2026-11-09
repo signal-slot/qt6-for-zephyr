@@ -28,6 +28,25 @@
 
 #include <rpi_fw.h>
 
+/* The driver flushes its buffer at init and invalidates it before each poll.
+ * Without both options these calls are stubs that return -ENOTSUP, which the
+ * driver does not look at (include/zephyr/cache.h).
+ */
+BUILD_ASSERT(IS_ENABLED(CONFIG_CACHE_MANAGEMENT) && IS_ENABLED(CONFIG_DCACHE),
+	     "rpi_fw_touch needs CONFIG_CACHE_MANAGEMENT and CONFIG_DCACHE: its cache calls "
+	     "would otherwise do nothing");
+
+/* init() asks the firmware device for SET_TOUCHBUF, so that device must be
+ * initialized first.  Both are POST_KERNEL; a larger priority number runs
+ * later.  Same condition as Zephyr's gpio_rpi_bcm283x.c.
+ * CONFIG_CHECK_INIT_PRIORITIES (default y) catches the same mistake after
+ * linking; this assertion fails earlier, with a clearer message, and also when
+ * that check is off.
+ */
+BUILD_ASSERT(CONFIG_INPUT_INIT_PRIORITY > CONFIG_RASPBERRYPI_FIRMWARE_INIT_PRIORITY,
+	     "rpi_fw_touch must initialize after the Raspberry Pi firmware device "
+	     "(CONFIG_INPUT_INIT_PRIORITY > CONFIG_RASPBERRYPI_FIRMWARE_INIT_PRIORITY)");
+
 #define RPI_FW_TAG_SET_TOUCHBUF 0x0004801fU
 
 /* The VideoCore sees the ARM's RAM through this alias (the one Linux's DMA
