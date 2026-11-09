@@ -455,7 +455,6 @@ config INPUT_RPI_FW_TOUCH
 	bool "Raspberry Pi official 7-inch display touch (VideoCore firmware)"
 	default y
 	depends on INPUT
-	depends on RASPBERRYPI_FIRMWARE
 	depends on DT_HAS_SIGNAL_SLOT_RPI_FW_TOUCH_ENABLED
 	select INPUT_TOUCH
 	help

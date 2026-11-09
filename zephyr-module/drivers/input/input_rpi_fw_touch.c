@@ -23,10 +23,16 @@
 #include <zephyr/cache.h>
 #include <zephyr/input/input.h>
 #include <zephyr/input/input_touch.h>
+#include <zephyr/sys/device_mmio.h>
+#include <zephyr/sys/sys_io.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
+#include <errno.h>
 #include <string.h>
 
+#ifdef CONFIG_RASPBERRYPI_FIRMWARE
 #include <rpi_fw.h>
+#endif
 
 /* The driver flushes its buffer at init and invalidates it before each poll.
  * Without both options these calls are stubs that return -ENOTSUP, which the
@@ -36,16 +42,21 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_CACHE_MANAGEMENT) && IS_ENABLED(CONFIG_DCACHE),
 	     "rpi_fw_touch needs CONFIG_CACHE_MANAGEMENT and CONFIG_DCACHE: its cache calls "
 	     "would otherwise do nothing");
 
-/* init() asks the firmware device for SET_TOUCHBUF, so that device must be
- * initialized first.  Both are POST_KERNEL; a larger priority number runs
- * later.  Same condition as Zephyr's gpio_rpi_bcm283x.c.
- * CONFIG_CHECK_INIT_PRIORITIES (default y) catches the same mistake after
- * linking; this assertion fails earlier, with a clearer message, and also when
- * that check is off.
+/* With the firmware node, init() asks the firmware device for SET_TOUCHBUF,
+ * so that device must be initialized first.  Both are POST_KERNEL; a larger
+ * priority number runs later.  Same condition as Zephyr's
+ * gpio_rpi_bcm283x.c.  CONFIG_CHECK_INIT_PRIORITIES (default y) catches the
+ * same mistake after linking; this assertion fails earlier, with a clearer
+ * message, and also when that check is off.
+ * Without CONFIG_RASPBERRYPI_FIRMWARE (the GL build) the driver sends the
+ * request itself and the priority symbol does not exist, so the assertion is
+ * left out.
  */
+#ifdef CONFIG_RASPBERRYPI_FIRMWARE
 BUILD_ASSERT(CONFIG_INPUT_INIT_PRIORITY > CONFIG_RASPBERRYPI_FIRMWARE_INIT_PRIORITY,
 	     "rpi_fw_touch must initialize after the Raspberry Pi firmware device "
 	     "(CONFIG_INPUT_INIT_PRIORITY > CONFIG_RASPBERRYPI_FIRMWARE_INIT_PRIORITY)");
+#endif
 
 #define RPI_FW_TAG_SET_TOUCHBUF 0x0004801fU
 
@@ -54,6 +65,27 @@ BUILD_ASSERT(CONFIG_INPUT_INIT_PRIORITY > CONFIG_RASPBERRYPI_FIRMWARE_INIT_PRIOR
  */
 #define VC_BUS_ALIAS 0xC0000000U
 #define RAM_END      0x40000000U
+
+/*
+ * Without the `firmware` property and with CONFIG_RASPBERRYPI_FIRMWARE off
+ * (the GL build, where YakoGL polls the property mailbox itself and Zephyr's
+ * firmware node is off) the tag is sent with one request on the mailbox
+ * registers, the same sequence as YakoGL's
+ * rpi_mbox.c: Linux v6.17 drivers/mailbox/bcm2835-mailbox.c (registers) and
+ * drivers/firmware/raspberrypi.c (property buffer, channel 8).  It is sent
+ * once at init, before the application runs; afterwards the driver only reads
+ * memory.
+ */
+#define MBOX_BASE      0xfe00b880U /* bus 0x7e00b880 */
+#define MAIL0_RD       0x00
+#define MAIL0_STA      0x18
+#define MAIL1_WRT      0x20
+#define MAIL1_STA      0x38
+#define MBOX_FULL      BIT(31)
+#define MBOX_EMPTY     BIT(30)
+#define CHAN_PROPERTY  8
+#define STATUS_SUCCESS 0x80000000U
+#define TAG_RESPONSE   BIT(31)
 
 #define MAX_POINTS         10
 #define NPOINTS_INVALID    99
@@ -167,6 +199,74 @@ static void rpi_fw_touch_poll(struct k_work *work)
 	k_work_reschedule(&data->work, K_MSEC(cfg->poll_interval_ms));
 }
 
+#ifndef CONFIG_RASPBERRYPI_FIRMWARE
+/* A whole 64-byte cache line, so that the invalidate after the answer does
+ * not write back a neighbour's dirty data over the firmware's reply.
+ */
+static uint32_t mbox_buf[16] __aligned(64);
+#endif
+
+/* Send SET_TOUCHBUF with the buffer's bus address; *arg is the answer. */
+static int rpi_fw_touch_set_buf(const struct rpi_fw_touch_config *cfg, uint32_t *arg)
+{
+	if (cfg->fw != NULL) {
+#ifdef CONFIG_RASPBERRYPI_FIRMWARE
+		return rpi_fw_transfer(cfg->fw, RPI_FW_TAG_SET_TOUCHBUF, arg, sizeof(*arg));
+#else
+		return -ENOTSUP;
+#endif
+	}
+
+#ifndef CONFIG_RASPBERRYPI_FIRMWARE
+	mm_reg_t mbox;
+	uint32_t msg;
+	uint32_t *b = mbox_buf;
+
+	device_map(&mbox, MBOX_BASE, 0x40, K_MEM_CACHE_NONE);
+	if (mbox == 0) {
+		return -ENOMEM;
+	}
+
+	b[0] = 7 * sizeof(uint32_t); /* total size */
+	b[1] = 0;                    /* request */
+	b[2] = RPI_FW_TAG_SET_TOUCHBUF;
+	b[3] = sizeof(uint32_t);     /* value buffer size */
+	b[4] = 0;                    /* request code */
+	b[5] = *arg;
+	b[6] = 0;                    /* end tag */
+	sys_cache_data_flush_range(b, sizeof(mbox_buf));
+
+	for (int t = 0; sys_read32(mbox + MAIL1_STA) & MBOX_FULL; t++) {
+		if (t > 100000) {
+			return -ETIMEDOUT;
+		}
+		k_busy_wait(1);
+	}
+	sys_write32((uint32_t)(k_mem_phys_addr(b) | VC_BUS_ALIAS) | CHAN_PROPERTY, mbox + MAIL1_WRT);
+
+	for (int t = 0;; t++) {
+		if (!(sys_read32(mbox + MAIL0_STA) & MBOX_EMPTY)) {
+			msg = sys_read32(mbox + MAIL0_RD);
+			if ((msg & 0xf) == CHAN_PROPERTY) {
+				break;
+			}
+		}
+		if (t > 1000000) {
+			return -ETIMEDOUT;
+		}
+		k_busy_wait(1);
+	}
+	sys_cache_data_invd_range(b, sizeof(mbox_buf));
+	if (b[1] != STATUS_SUCCESS || !(b[4] & TAG_RESPONSE)) {
+		return -EIO;
+	}
+	*arg = b[5];
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
 static int rpi_fw_touch_init(const struct device *dev)
 {
 	const struct rpi_fw_touch_config *cfg = dev->config;
@@ -175,7 +275,7 @@ static int rpi_fw_touch_init(const struct device *dev)
 	uint32_t arg;
 	int ret;
 
-	if (!device_is_ready(cfg->fw)) {
+	if (cfg->fw != NULL && !device_is_ready(cfg->fw)) {
 		printk("rpi_fw_touch: the firmware device is not ready\n");
 		return -ENODEV;
 	}
@@ -190,7 +290,7 @@ static int rpi_fw_touch_init(const struct device *dev)
 	sys_cache_data_flush_range(cfg->buf, TOUCHBUF_SIZE);
 
 	arg = (uint32_t)phys | VC_BUS_ALIAS;
-	ret = rpi_fw_transfer(cfg->fw, RPI_FW_TAG_SET_TOUCHBUF, &arg, sizeof(arg));
+	ret = rpi_fw_touch_set_buf(cfg, &arg);
 	if (ret < 0) {
 		printk("rpi_fw_touch: SET_TOUCHBUF failed (%d)\n", ret);
 		return ret;
@@ -217,7 +317,8 @@ static int rpi_fw_touch_init(const struct device *dev)
 	static struct rpi_fw_touch_data rpi_fw_touch_data_##n;                                     \
 	static const struct rpi_fw_touch_config rpi_fw_touch_config_##n = {                        \
 		.common = INPUT_TOUCH_DT_INST_COMMON_CONFIG_INIT(n),                               \
-		.fw = DEVICE_DT_GET(DT_INST_PHANDLE(n, firmware)),                                 \
+		.fw = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, firmware),                              \
+				  (DEVICE_DT_GET(DT_INST_PHANDLE(n, firmware))), (NULL)),          \
 		.buf = rpi_fw_touch_buf_##n,                                                       \
 		.poll_interval_ms = DT_INST_PROP(n, poll_interval_ms),                             \
 	};                                                                                         \
