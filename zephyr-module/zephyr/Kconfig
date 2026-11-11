@@ -447,3 +447,17 @@ config QT_EXTERNAL_ROTATION
 	  Board-agnostic (it only affects the reported orientation).
 
 endif # QT
+
+# Drivers of this module that do not depend on Qt.  They are outside `if QT`
+# so that they build for any application that enables them in devicetree.
+
+config INPUT_RPI_FW_TOUCH
+	bool "Raspberry Pi official 7-inch display touch (VideoCore firmware)"
+	default y
+	depends on INPUT
+	depends on DT_HAS_SIGNAL_SLOT_RPI_FW_TOUCH_ENABLED
+	select INPUT_TOUCH
+	help
+	  Single-touch input of the official Raspberry Pi 7-inch display on a
+	  Raspberry Pi 4.  The firmware reads the touch controller and writes
+	  the points into a buffer this driver gives it (SET_TOUCHBUF).

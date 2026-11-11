@@ -26,3 +26,12 @@
 &fb0 {
 	status = "disabled";
 };
+
+/*
+ * The touch driver (issue #26) registers its buffer through the firmware node,
+ * which is off here: without the `firmware` property it sends the request on
+ * the mailbox registers once at init (before YakoGL's mailbox code runs).
+ */
+&touch0 {
+	/delete-property/ firmware;
+};
