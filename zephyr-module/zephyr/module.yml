@@ -12,5 +12,8 @@
 build:
   cmake: zephyr
   kconfig: zephyr/Kconfig
+  settings:
+    # Devicetree bindings of the drivers in this module (dts/bindings/).
+    dts_root: .
 
 name: qt-zephyr-port

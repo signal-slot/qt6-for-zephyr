@@ -19,3 +19,33 @@
 	width = <800>;
 	height = <480>;
 };
+
+/*
+ * Touch of the official 7-inch display, read through the VideoCore firmware
+ * (issue #26, drivers/input/input_rpi_fw_touch.c).  The firmware reported x
+ * 8..798 and y 0..478 (measured).  Zephyr inverts with screen-width - x, so
+ * y = 0 would become 480, one past the 800x480 screen; screen-height 479 avoids
+ * that.  x would stay inside the screen with 800 as well; 799 is the highest
+ * value of the screen.  With the firmware's x ending at 798, the inverted x
+ * does not reach the last 8 columns (inferred, not measured).  With
+ * display_lcd_rotate=2 (the picture is turned by 180 degrees) a tap on the
+ * top-left corner came out at (767,460) and on the top-right at (21,466),
+ * bottom-right (24,7) before the inversion (measured), so both axes are
+ * inverted here.  Whether the touch itself is turned by 180 degrees on this
+ * panel, or follows the rotation, is not known: display_lcd_rotate=0 was not
+ * tried.
+ */
+/ {
+	chosen {
+		zephyr,touch = &touch0;
+	};
+
+	touch0: touchscreen {
+		compatible = "signal-slot,rpi-fw-touch";
+		firmware = <&rpi_fw>;
+		screen-width = <799>;
+		screen-height = <479>;
+		inverted-x;
+		inverted-y;
+	};
+};

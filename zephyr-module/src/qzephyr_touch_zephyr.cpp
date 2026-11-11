@@ -73,6 +73,12 @@ void process_event(input_event *evt, void *)
     // Verdin AM62P + the 7" DSI display: the ILI2132A reports in the
     // panel's own landscape frame, no rotation on the image path either.
     const QPoint p(g_state.x, g_state.y);
+#elif defined(CONFIG_BOARD_RPI_4B)
+    // Raspberry Pi 4 + the official 7" display: the firmware reports in the
+    // panel's landscape frame (800x480) and the image is not rotated by us.
+    // Axis inversion for display_lcd_rotate=2 is a devicetree property of the
+    // touch node (inverted-x / inverted-y), applied by the driver.
+    const QPoint p(g_state.x, g_state.y);
 #else
     constexpr int kPanelMaxX = 719;
     const int lx = g_state.y;
