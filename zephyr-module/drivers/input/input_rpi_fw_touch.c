@@ -76,7 +76,11 @@ BUILD_ASSERT(CONFIG_INPUT_INIT_PRIORITY > CONFIG_RASPBERRYPI_FIRMWARE_INIT_PRIOR
  * once at init, before the application runs; afterwards the driver only reads
  * memory.
  */
-#define MBOX_BASE      0xfe00b880U /* bus 0x7e00b880 */
+/* From the devicetree: the address macros are generated for &mbox0 although the
+ * GL overlay disables the node.
+ */
+#define MBOX_BASE      DT_REG_ADDR(DT_NODELABEL(mbox0))
+#define MBOX_SIZE      DT_REG_SIZE(DT_NODELABEL(mbox0))
 #define MAIL0_RD       0x00
 #define MAIL0_STA      0x18
 #define MAIL1_WRT      0x20
@@ -222,7 +226,7 @@ static int rpi_fw_touch_set_buf(const struct rpi_fw_touch_config *cfg, uint32_t 
 	uint32_t msg;
 	uint32_t *b = mbox_buf;
 
-	device_map(&mbox, MBOX_BASE, 0x40, K_MEM_CACHE_NONE);
+	device_map(&mbox, MBOX_BASE, MBOX_SIZE, K_MEM_CACHE_NONE);
 	if (mbox == 0) {
 		return -ENOMEM;
 	}
@@ -250,6 +254,12 @@ static int rpi_fw_touch_set_buf(const struct rpi_fw_touch_config *cfg, uint32_t 
 			if ((msg & 0xf) == CHAN_PROPERTY) {
 				break;
 			}
+			/* A message of another channel is dropped; say so.  A reply
+			 * on channel 8 that is meant for another user is not told
+			 * apart from ours.
+			 */
+			printk("rpi_fw_touch: dropped a mailbox message 0x%08x (channel %u)\n", msg,
+			       msg & 0xf);
 		}
 		if (t > 1000000) {
 			return -ETIMEDOUT;
