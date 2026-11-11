@@ -173,14 +173,11 @@ add_compile_options(
     -Wno-error=implicit-int
     -Wno-error=int-conversion
 )
-# qharfbuzzng.cpp assigns hb_codepoint_t* to glyph_t* (unsigned int*).  On
-# 32-bit ARM-M (the RT1170 script this comment comes from) uint32_t is
-# unsigned long, so the two pointer types differ although both are 32-bit, and
-# the C++ type checker rejects the conversion.  -fpermissive demotes that error
-# to a warning.  On AArch64 uint32_t is unsigned int (checked with the Zephyr
-# SDK's aarch64-zephyr-elf-gcc), so that conversion should not arise here;
-# whether -fpermissive is still needed for another reason is not known.
-add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fpermissive>)
+# No -fpermissive here.  The RT1170 script adds it for qharfbuzzng.cpp, which
+# assigns hb_codepoint_t* to glyph_t* (unsigned int*): on 32-bit ARM-M uint32_t
+# is unsigned long, so the pointer types differ.  On AArch64 uint32_t is
+# unsigned int, and Stage 1 builds without the option (Qt 6.11.0 and 6.12.0,
+# #32).
 
 # Define __ZEPHYR__ so qtbase/src/corelib/global/qsystemdetection.h
 # picks the Q_OS_ZEPHYR branch we patched in.  Stage 1 deliberately does
