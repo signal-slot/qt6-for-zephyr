@@ -16,8 +16,15 @@ include: touchscreen-common.yaml
 properties:
   firmware:
     type: phandle
-    required: true
-    description: The Raspberry Pi firmware node (raspberrypi,bcm283x-firmware).
+    required: false
+    description: |
+      The Raspberry Pi firmware node (raspberrypi,bcm283x-firmware).  Without
+      it, and with CONFIG_RASPBERRYPI_FIRMWARE off, the driver sends
+      SET_TOUCHBUF once at init on the mailbox registers itself, for builds
+      where another driver polls the property mailbox (the GL build, YakoGL)
+      and the firmware node is off.  With CONFIG_RASPBERRYPI_FIRMWARE on and
+      no property the init fails with -ENOTSUP; with it off and the property
+      given the build does not link.
 
   poll-interval-ms:
     type: int
