@@ -2,7 +2,7 @@
 #include <stdarg.h>
 #include <zephyr/sys/byteorder.h>
 
-extern int zvfs_ioctl(int fd, unsigned long request, void *arg);
+extern int zvfs_ioctl(int fd, unsigned long request, va_list args);
 
 uint32_t htonl(uint32_t hostlong)
 {
@@ -28,7 +28,7 @@ int ioctl(int fd, unsigned long request, ...)
 {
     va_list ap;
     va_start(ap, request);
-    void *arg = va_arg(ap, void *);
+    const int ret = zvfs_ioctl(fd, request, ap);
     va_end(ap);
-    return zvfs_ioctl(fd, request, arg);
+    return ret;
 }
