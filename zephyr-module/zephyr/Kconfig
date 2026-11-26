@@ -133,6 +133,39 @@ config QT_NETWORK_IPV6
 	  Add IPv6 to the Qt Network build.  Costs a noticeable amount of
 	  flash in Zephyr's IP stack.  Off by default for embedded SKUs.
 
+config QT_EVENT_DISPATCHER_WAIT_ON_SOCKETS
+	bool "Wake the Qt event loop when a socket is ready"
+	default n
+	select ZVFS_EVENTFD
+	help
+	  By default the Zephyr event dispatcher blocks in k_poll() on a single
+	  wake-up signal, for at most 50 ms, and looks at the sockets with a
+	  zero-timeout poll() only after that, so data that arrives for a
+	  QSocketNotifier is noticed up to 50 ms late.  With this option the
+	  dispatcher waits with one poll() on the sockets and on an eventfd
+	  that wakeUp() writes, so a ready socket ends the wait at once.  The
+	  50 ms bound is unchanged and the timer wait is rounded up to whole
+	  milliseconds.  Needs CONFIG_ZVFS_POLL_MAX of at least the number of
+	  poll events the notifiers need plus one for the eventfd (one per
+	  read notifier and per TCP write notifier; the default is 3), or the
+	  wait fails, a warning is printed and the loop sleeps 5 ms instead.
+	  If the notifiers alone need more than that, the poll() that delivers
+	  them fails too and they stop being delivered (see
+	  signal-slot/qt6-for-zephyr#45).
+	  wakeUp() can no longer be called from an ISR.  Measured on the
+	  Raspberry Pi 4 only.
+
+config ZVFS_EVENTFD_ADD_SIZE_QT_EVENT_DISPATCHER
+	int
+	default 1
+	depends on QT_EVENT_DISPATCHER_WAIT_ON_SOCKETS
+	help
+	  The event dispatcher keeps one permanent eventfd for wakeUp().  Zephyr
+	  adds the ZVFS_EVENTFD_ADD_SIZE_* requirements of all users (the socket
+	  service asks for one too) and takes the larger of that sum and
+	  ZVFS_EVENTFD_MAX, unless ZVFS_EVENTFD_IGNORE_MIN is set
+	  (lib/os/CMakeLists.txt).
+
 config QT_OPENGL
 	bool "OpenGL ES 2.0 rendering on the GPU through YakoGL"
 	default n
